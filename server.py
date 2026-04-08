@@ -315,6 +315,7 @@ async def _process_po_to_so(header, lines, raw_content, source, fmt) -> dict:
     Customer-focused pipeline: match incoming PO to P21 customer/items,
     score confidence, generate CISM SO import files.
     """
+    global _customer_engine
     engine = _get_customer_engine()
 
     # Generate intake ID for dedup
@@ -438,6 +439,8 @@ async def _process_po_to_so(header, lines, raw_content, source, fmt) -> dict:
             } for cl in cism_lines if cl.get("inv_mast_uid")],
             crosswalk_dir=settings.crosswalk_dir,
         )
+        # Invalidate cached engine so newly learned rows are visible next call
+        _customer_engine = None
 
     # Build payload for staging
     payload = POPayload(
@@ -680,6 +683,9 @@ async def approve_po(intake_id: str, req: ApproveRequest):
                 } for l in po.get("lines", []) if l.get("item_id_p21")],
                 crosswalk_dir=settings.crosswalk_dir,
             )
+            # Invalidate cached engine so newly learned rows are visible next call
+            global _customer_engine
+            _customer_engine = None
         except Exception as e:
             logger.error(f"Learning loop error: {e}")
 

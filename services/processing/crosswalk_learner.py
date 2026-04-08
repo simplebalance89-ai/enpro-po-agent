@@ -30,6 +30,7 @@ def _read_csv(filename: str) -> list[dict]:
 def _write_csv(filename: str, rows: list[dict]):
     if not rows:
         return
+    os.makedirs(CROSSWALK_DIR, exist_ok=True)
     path = os.path.join(CROSSWALK_DIR, filename)
     with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=rows[0].keys())
