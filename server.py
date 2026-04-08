@@ -48,7 +48,11 @@ from services.processing.duplicate_detector import (
     generate_intake_id, is_duplicate, log_intake,
 )
 from cism_generator import generate_cism_file
-from services.processing.blob_uploader import upload_approved_cism, upload_rejected_cism
+from services.processing.blob_uploader import (
+    upload_approved_cism,
+    upload_rejected_cism,
+    sync_crosswalks_from_blob,
+)
 from services.processing.quote_exporter import export_quotes_to_blob
 from services.processing.so_exporter import export as export_so_data
 from services.processing.customer_crosswalk_engine import CustomerCrosswalkEngine
@@ -1131,6 +1135,86 @@ async def upload_p21_csv(
 
 
 _build_status = {"state": "idle", "result": None}
+
+@app.post("/api/v1/crosswalk/sync-from-blob")
+async def sync_crosswalks_endpoint(rebuild: bool = False):
+    """
+    Download every file under the blob 'crosswalk/' prefix onto the
+    persistent disk (p21_data/, crosswalks/, quote_data/). Optionally run
+    the crosswalk build afterward if ?rebuild=true.
+
+    This is the intended bootstrap path for a fresh Render disk: Azure Blob
+    is the source of truth, the persistent disk is a cache.
+    """
+    result = sync_crosswalks_from_blob()
+
+    # Invalidate the cached customer engine so it picks up the new CSVs.
+    global _customer_engine
+    _customer_engine = None
+
+    if rebuild:
+        # Kick off a build in the background using the same path as
+        # /api/v1/crosswalk/build. Only valid if the raw P21 CSVs were part
+        # of the sync payload.
+        headers_path = os.path.join(P21_DATA_DIR, "p21_headers.csv")
+        lines_path = os.path.join(P21_DATA_DIR, "p21_lines.csv")
+        customers_path = os.path.join(P21_DATA_DIR, "p21_customers.csv")
+        if all(os.path.exists(p) for p in (headers_path, lines_path, customers_path)):
+            import threading
+
+            def _do_build():
+                global _customer_engine
+                _build_status["state"] = "building"
+                _build_status["result"] = None
+                try:
+                    from services.processing.crosswalk_csv_builder import build_all
+                    build_all(
+                        headers_path=headers_path,
+                        lines_path=lines_path,
+                        customers_path=customers_path,
+                        output_dir=settings.crosswalk_dir,
+                    )
+                    _customer_engine = None
+                    _build_status["result"] = {"status": "success"}
+                    _build_status["state"] = "done"
+                except Exception as e:
+                    _build_status["result"] = {"status": "error", "error": str(e)}
+                    _build_status["state"] = "error"
+                    logger.error(f"Post-sync build failed: {e}")
+
+            threading.Thread(target=_do_build, daemon=True).start()
+            result["build"] = "started"
+        else:
+            result["build"] = "skipped (no raw P21 CSVs in blob)"
+
+    return result
+
+
+@app.on_event("startup")
+async def _bootstrap_crosswalks_if_empty():
+    """
+    On cold start, if the persistent disk has no crosswalks yet, try to
+    hydrate them from Azure Blob. Non-fatal: logs and continues on failure
+    so an unreachable blob never blocks boot.
+    """
+    try:
+        cw_dir = settings.crosswalk_dir
+        marker = os.path.join(cw_dir, "customer_crosswalk.csv")
+        if os.path.exists(marker):
+            logger.info(f"Crosswalks already present at {cw_dir}, skipping blob bootstrap")
+            return
+        logger.info(f"Crosswalks missing at {cw_dir}, syncing from blob on startup")
+        result = sync_crosswalks_from_blob()
+        logger.info(
+            f"Startup blob sync: downloaded={len(result.get('downloaded', []))}, "
+            f"skipped={len(result.get('skipped', []))}, errors={len(result.get('errors', []))}"
+        )
+        if result.get("errors"):
+            for err in result["errors"][:5]:
+                logger.warning(f"  blob sync error: {err}")
+    except Exception as e:
+        logger.error(f"Startup blob bootstrap failed (non-fatal): {e}")
+
 
 @app.post("/api/v1/crosswalk/build")
 async def build_crosswalks(background_tasks=None):

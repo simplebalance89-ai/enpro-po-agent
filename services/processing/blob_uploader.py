@@ -207,6 +207,102 @@ def upload_approved_cism(local_file_path: str, po_number: str, intake_id: str) -
     )
 
 
+# ── Blob → Disk sync for crosswalks / P21 data ──────────────────────────────
+
+# Maps blob key under the "crosswalk/" prefix to the local filesystem path the
+# rest of the app expects. Missing blobs are silently skipped; extra blobs
+# under the prefix fall through the default mapping below.
+_P21_FILE_RENAMES = {
+    "so_headers_latest.csv": "p21_headers.csv",
+    "so_lines_latest.csv": "p21_lines.csv",
+    "customers_latest.csv": "p21_customers.csv",
+    # ship_tos / items aren't required by build_all but sync them anyway for
+    # anything downstream that might want them.
+    "ship_tos_latest.csv": "p21_ship_tos.csv",
+    "items_latest.csv": "p21_items.csv",
+}
+
+
+def _local_path_for_blob(blob_name: str) -> Optional[str]:
+    """
+    Map a blob name under the 'crosswalk/' prefix to a local path on the
+    persistent disk. Returns None for blobs that shouldn't be synced.
+    """
+    if not blob_name.startswith("crosswalk/"):
+        return None
+    rel = blob_name[len("crosswalk/"):]
+    if not rel or rel.endswith("/"):
+        return None
+
+    # crosswalk/p21/<file> → /app/data/p21_data/<mapped-or-same>
+    if rel.startswith("p21/"):
+        fname = rel.split("/", 1)[1]
+        mapped = _P21_FILE_RENAMES.get(fname, fname)
+        return os.path.join(os.environ.get("P21_DATA_DIR", "/app/data/p21_data"), mapped)
+
+    # crosswalk/quotes/<file> → /app/data/quote_data/<file>
+    if rel.startswith("quotes/"):
+        fname = rel.split("/", 1)[1]
+        return os.path.join(os.environ.get("QUOTE_DATA_DIR", "/app/data/quote_data"), fname)
+
+    # crosswalk/<file> (top level pre-built crosswalk CSVs) → /app/data/crosswalks/<file>
+    if "/" not in rel:
+        return os.path.join(os.environ.get("CROSSWALK_DIR", "/app/data/crosswalks"), rel)
+
+    # Anything else under crosswalk/ — ignore (nested dirs we don't know about)
+    return None
+
+
+def sync_crosswalks_from_blob() -> dict:
+    """
+    Download every file under the blob 'crosswalk/' prefix into the matching
+    local directory on the persistent disk. Returns a summary dict.
+
+    Safe to call on a cold start with an empty disk, or on demand via the
+    /api/v1/crosswalk/sync-from-blob endpoint.
+    """
+    uploader = get_uploader()
+    result = {
+        "downloaded": [],
+        "skipped": [],
+        "errors": [],
+        "container": BLOB_CONTAINER_NAME,
+    }
+
+    if not uploader.is_configured():
+        result["errors"].append("Blob client not configured (missing AZURE_BLOB_CONNECTION_STRING?)")
+        return result
+
+    try:
+        container_client = uploader.client.get_container_client(BLOB_CONTAINER_NAME)
+        blobs = list(container_client.list_blobs(name_starts_with="crosswalk/"))
+    except Exception as e:
+        result["errors"].append(f"list_blobs failed: {e}")
+        return result
+
+    for blob in blobs:
+        local_path = _local_path_for_blob(blob.name)
+        if not local_path:
+            result["skipped"].append(blob.name)
+            continue
+        try:
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            blob_client = container_client.get_blob_client(blob.name)
+            with open(local_path, "wb") as f:
+                f.write(blob_client.download_blob().readall())
+            result["downloaded"].append({
+                "blob": blob.name,
+                "local": local_path,
+                "size": blob.size,
+            })
+            logger.info(f"Synced blob {blob.name} -> {local_path} ({blob.size} bytes)")
+        except Exception as e:
+            result["errors"].append(f"{blob.name}: {e}")
+            logger.error(f"Failed to sync blob {blob.name}: {e}")
+
+    return result
+
+
 def upload_rejected_cism(local_file_path: str, po_number: str, intake_id: str) -> dict:
     """Convenience function to upload a rejected CISM file."""
     return get_uploader().upload_cism(
