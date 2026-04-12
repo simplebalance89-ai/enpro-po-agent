@@ -617,7 +617,7 @@ async def review_approved():
     } for po in all_pos]
 
 
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 @app.get("/api/v1/cism/download/{intake_id}/{file_type}")
 async def download_cism(intake_id: str, file_type: str):
@@ -642,13 +642,81 @@ async def download_cism(intake_id: str, file_type: str):
     return FileResponse(path, media_type="text/csv", filename=os.path.basename(path))
 
 
+@app.get("/api/v1/p21/payload/{intake_id}")
+async def get_p21_payload(intake_id: str):
+    """Generate and return the P21 Transaction API payload JSON for a PO.
+    Used for manual testing — download this JSON and POST it to P21 locally."""
+    po = local_store.get_po(intake_id)
+    if not po:
+        raise HTTPException(404, f"PO {intake_id} not found")
+
+    cust_id = po.get("customer_match", {}).get("p21_id", "")
+    if cust_id:
+        engine = _get_customer_engine()
+        po["customer_defaults"] = engine.get_customer_defaults(cust_id)
+
+    from services.processing.p21_api_client import build_p21_payload
+    payload = build_p21_payload(po)
+
+    return JSONResponse(
+        content=payload,
+        headers={"Content-Disposition": f'attachment; filename="p21_payload_{intake_id}.json"'},
+    )
+
+
+@app.post("/api/v1/p21/payload/from-file")
+async def generate_p21_payload_from_file(file: UploadFile = File(...)):
+    """Upload a cXML/PDF PO file, parse it, run crosswalk, and return the P21 API payload.
+    One-stop endpoint for testing: upload PO → get P21 JSON back."""
+    content = await file.read()
+    filename = file.filename or "upload"
+
+    if filename.lower().endswith(".pdf"):
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        try:
+            header, lines, raw = po_parser.parse_pdf(
+                tmp_path, settings.doc_intel_endpoint, settings.doc_intel_key
+            )
+        finally:
+            os.unlink(tmp_path)
+    else:
+        text = content.decode("utf-8", errors="replace")
+        header, lines, raw = po_parser.parse_cxml(text)
+
+    engine = _get_customer_engine()
+    result = engine.match_po(header, lines)
+
+    po_data = {
+        "header": header.__dict__ if hasattr(header, "__dict__") else header,
+        "lines": [l.__dict__ if hasattr(l, "__dict__") else l for l in lines],
+        "customer_match": result.get("customer_match", {}),
+        "customer_defaults": result.get("customer_defaults", {}),
+    }
+
+    from services.processing.p21_api_client import build_p21_payload
+    payload = build_p21_payload(po_data)
+
+    return {
+        "p21_payload": payload,
+        "parse_summary": {
+            "po_no": (header.po_no if hasattr(header, "po_no") else header.get("po_no", "")),
+            "customer_match": result.get("customer_match", {}),
+            "line_count": len(lines),
+            "confidence": result.get("confidence", "unknown"),
+        },
+    }
+
+
 class ApproveRequest(BaseModel):
     reviewer: str = "system"
     notes: str = ""
 
 @app.post("/api/v1/review/po/{intake_id}/approve")
 async def approve_po(intake_id: str, req: ApproveRequest):
-    """Approve a PO — triggers learning loop and CISM generation."""
+    """Approve a PO — triggers learning loop and submits to P21 (API or CISM fallback)."""
     po = local_store.get_po(intake_id)
     if not po:
         raise HTTPException(404, f"PO {intake_id} not found")
@@ -693,22 +761,34 @@ async def approve_po(intake_id: str, req: ApproveRequest):
         except Exception as e:
             logger.error(f"Learning loop error: {e}")
 
-    # Add to CISM batch
+    # Submit to P21 (API if configured, CISM fallback if not)
+    p21_result = {}
     try:
         updated_po = local_store.get_po(intake_id)
-        # Inject customer defaults for CISM (contact_id, address_id, terms, carrier)
+        # Inject customer defaults (contact_id, address_id, terms, carrier)
         cust_id = updated_po.get("customer_match", {}).get("p21_id", "")
         if cust_id:
             engine = _get_customer_engine()
             updated_po["customer_defaults"] = engine.get_customer_defaults(cust_id)
-        add_to_batch(updated_po)
+
+        from services.processing.p21_so_submitter import submit_to_p21
+        p21_result = await submit_to_p21(updated_po)
+
+        # Store P21 result on the PO record
+        local_store.update_po(intake_id, {
+            "p21_result": p21_result,
+            "p21_order_no": p21_result.get("order_no", ""),
+            "p21_method": p21_result.get("method", ""),
+        })
     except Exception as e:
-        logger.error(f"CISM batch error: {e}")
+        logger.error(f"P21 submission error: {e}")
+        p21_result = {"method": "error", "status": "error", "message": str(e)}
 
     batch = get_batch_status()
     return {
         "status": "approved",
         "intake_id": intake_id,
+        "p21": p21_result,
         "batch_headers": batch["header_count"],
         "batch_lines": batch["line_count"],
     }

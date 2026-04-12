@@ -1,0 +1,12 @@
+.git
+__pycache__
+.env
+test_data
+cism_test
+README.md
+GAP_ANALYSIS.md
+AGENTS.md
+.dockerignore
+Dockerfile
+.venv
+*.pyc
