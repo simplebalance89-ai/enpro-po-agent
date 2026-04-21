@@ -78,6 +78,12 @@ tr:hover { background: #141620; }
 .pipe-step .pipe-desc b { color: #4ade80; }
 .empty { text-align: center; padding: 40px; color: #475569; }
 .scroll-table { max-height: 400px; overflow-y: auto; }
+.badge-ob { display:inline-block; padding:2px 9px; border-radius:8px; font-size:11px; font-weight:600; text-transform:uppercase; }
+.badge-ob.pending  { background:#1e2030; color:#64748b; }
+.badge-ob.prepared { background:#1e3a5f; color:#60a5fa; }
+.badge-ob.ready    { background:#0d2d3a; color:#22d3ee; }
+.badge-ob.sent     { background:#0d3320; color:#4ade80; }
+.badge-ob.failed   { background:#3b1111; color:#f87171; }
 </style>
 </head>
 <body>
@@ -100,6 +106,7 @@ tr:hover { background: #141620; }
   <button class="tab" onclick="showTab('cism')">CISM Schema</button>
   <button class="tab" onclick="showTab('pipeline')">Pipeline</button>
   <button class="tab" onclick="showTab('payloads')">P21 Payloads <span class="badge" id="payloadsBadge">0</span></button>
+  <button class="tab" onclick="showTab('outbound')">Outbound Sync <span class="badge" id="outboundBadge">0</span></button>
 </div>
 <div class="content">
 
@@ -346,6 +353,42 @@ tr:hover { background: #141620; }
         </tr></thead>
         <tbody id="payloadsTbody"></tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- OUTBOUND SYNC -->
+<div class="tab-panel" id="panel-outbound">
+  <div class="xw-section">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px;">
+      <h3 style="margin:0;">Outbound Sync — P21 Invoice Feedback to Ariba/Coupa</h3>
+      <button class="btn btn-gray" style="padding:6px 14px;font-size:12px;" onclick="loadOutbound()">↻ Refresh</button>
+    </div>
+    <p class="desc" style="margin-top:6px;">
+      Foundation queue for syncing P21 invoice data back to source procurement systems.
+      <strong style="color:#fbbf24;">Mock send only</strong> — no live credentials configured yet.
+      Lifecycle: <span style="color:#64748b;">Pending</span> → <strong style="color:#22d3ee;">Prepare</strong> → <strong style="color:#22d3ee;">Ready</strong> → <strong style="color:#4ade80;">Sent</strong>.
+    </p>
+    <div id="outboundEmpty" class="empty" style="display:none;padding:30px;">No outbound records yet. Use "Prepare from Approved POs" below to create one.</div>
+    <div class="scroll-table">
+      <table id="outboundTable" style="display:none;">
+        <thead><tr>
+          <th>PO No</th><th>Source</th><th>Invoice No</th><th>Amount</th><th>Customer ID</th><th>Status</th><th>Updated</th><th>Last Error</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="outboundTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="xw-section" style="margin-top:16px;">
+    <h3>Prepare from Approved POs</h3>
+    <p class="desc">Choose an approved PO to build its outbound sync record and payload. Safe to re-run — idempotent.</p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <select id="outboundPoSelect" style="padding:8px;background:#141620;color:#e0e0e0;border:1px solid #2a2d3a;border-radius:4px;min-width:300px;font-size:13px;">
+        <option value="">— Select approved PO —</option>
+      </select>
+      <button class="btn btn-blue" onclick="prepareSelected()">Prepare Outbound Record</button>
+      <span id="prepareStatus" style="font-size:12px;color:#94a3b8;"></span>
     </div>
   </div>
 </div>
@@ -938,6 +981,7 @@ function showTab(name) {
   if (name === 'processed') loadProcessed();
   if (name === 'batch') loadBatch();
   if (name === 'payloads') loadPayloads();
+  if (name === 'outbound') loadOutbound();
 }
 
 async function loadPayloads() {
@@ -1066,6 +1110,130 @@ function closeModal() {
 document.getElementById('jsonModal').addEventListener('click', function(e) {
   if (e.target === this) closeModal();
 });
+
+// ── Outbound Sync ────────────────────────────────────────────────────────────
+
+function obBadge(status) {
+  return `<span class="badge-ob ${status||'pending'}">${status||'pending'}</span>`;
+}
+
+async function loadOutbound() {
+  try {
+    const [queueData, allPos] = await Promise.all([
+      fetch(`${API}/api/v1/outbound/queue`).then(r => r.json()),
+      fetch(`${API}/api/v1/review/all`).then(r => r.json()),
+    ]);
+
+    // Update badge
+    document.getElementById('outboundBadge').textContent = queueData.length;
+
+    // Render queue table
+    const tbody = document.getElementById('outboundTbody');
+    const tbl   = document.getElementById('outboundTable');
+    const empty = document.getElementById('outboundEmpty');
+
+    if (!queueData.length) {
+      empty.style.display = 'block';
+      tbl.style.display   = 'none';
+    } else {
+      empty.style.display = 'none';
+      tbl.style.display   = 'table';
+      tbody.innerHTML = queueData.map(r => {
+        const canPrepare = r.status === 'pending';
+        const canSend    = r.status === 'ready' || r.status === 'failed';
+        const canRetry   = r.status === 'failed';
+        const amt = r.amount_total ? '$' + parseFloat(r.amount_total).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
+        return `<tr>
+          <td style="font-weight:600;color:#fff;">${r.po_no||'—'}</td>
+          <td><span style="font-size:11px;padding:1px 7px;border-radius:3px;background:${r.source_system==='ariba'?'#1e3a5f':'#2d1b69'};color:#e0e0e0;">${r.source_system||'ariba'}</span></td>
+          <td style="font-family:monospace;font-size:11px;color:#64748b;">${r.p21_invoice_no||r.p21_order_no||'—'}</td>
+          <td style="text-align:right;">${amt}</td>
+          <td style="font-family:monospace;font-size:11px;color:#94a3b8;">${r.customer_id||'—'}</td>
+          <td>${obBadge(r.status)}</td>
+          <td style="font-size:11px;color:#64748b;">${r.updated_at?r.updated_at.substring(0,16).replace('T',' '):'—'}</td>
+          <td style="font-size:11px;color:#f87171;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.last_error||''}">${r.last_error||'—'}</td>
+          <td style="white-space:nowrap;display:flex;gap:6px;padding:8px 10px;">
+            <button class="btn btn-gray" style="padding:3px 9px;font-size:11px;" onclick="prepareOutbound('${r.intake_id}')">Prepare</button>
+            <button class="btn btn-gray" style="padding:3px 9px;font-size:11px;" onclick="viewOutboundPayload('${r.outbound_id}','${r.po_no}')">View</button>
+            ${canSend ? `<button class="btn btn-green" style="padding:3px 9px;font-size:11px;" onclick="sendMock('${r.outbound_id}')">Send (Mock)</button>` : ''}
+            ${canRetry ? `<button class="btn btn-blue" style="padding:3px 9px;font-size:11px;" onclick="sendMock('${r.outbound_id}')">Retry</button>` : ''}
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    // Populate approved PO select — exclude already-prepared
+    const preparedIntakeIds = new Set(queueData.map(r => r.intake_id));
+    const approved = (allPos || []).filter(p => p.review_status === 'approved');
+    const sel = document.getElementById('outboundPoSelect');
+    sel.innerHTML = '<option value="">— Select approved PO —</option>' +
+      approved.map(p => {
+        const label = preparedIntakeIds.has(p.intake_id)
+          ? `${p.po_no||p.intake_id} [already prepared]`
+          : `${p.po_no||p.intake_id} — ${p.source||''} ${p.confidence||''}`;
+        return `<option value="${p.intake_id}">${label}</option>`;
+      }).join('');
+  } catch(e) {
+    console.error('loadOutbound:', e);
+  }
+}
+
+async function prepareSelected() {
+  const sel = document.getElementById('outboundPoSelect');
+  const intake_id = sel.value;
+  if (!intake_id) { alert('Select an approved PO first.'); return; }
+  await prepareOutbound(intake_id);
+}
+
+async function prepareOutbound(intake_id) {
+  const status = document.getElementById('prepareStatus');
+  status.style.color = '#94a3b8';
+  status.textContent = 'Preparing…';
+  try {
+    const resp = await fetch(`${API}/api/v1/outbound/prepare/${intake_id}`, {method:'POST'});
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || resp.statusText);
+    status.style.color = '#4ade80';
+    status.textContent = `✓ ${data.outbound_id} ready`;
+    loadOutbound();
+  } catch(e) {
+    status.style.color = '#f87171';
+    status.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function sendMock(outbound_id) {
+  try {
+    const resp = await fetch(`${API}/api/v1/outbound/send/${outbound_id}`, {method:'POST'});
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || resp.statusText);
+    alert(`Mock send complete.\nACK: ${data.acknowledgment||'—'}\n${data.message||''}`);
+    loadOutbound();
+  } catch(e) {
+    alert('Send error: ' + e.message);
+  }
+}
+
+async function viewOutboundPayload(outbound_id, po_no) {
+  const modal  = document.getElementById('jsonModal');
+  const viewer = document.getElementById('jsonViewer');
+  const title  = document.getElementById('modalTitle');
+  const fnEl   = document.getElementById('modalFilename');
+  const dlLink = document.getElementById('modalDownloadLink');
+  viewer.textContent = 'Loading…';
+  modal.style.display = 'block';
+  document.body.style.overflow = 'hidden';
+  title.textContent = `Outbound Payload — PO ${po_no||outbound_id}`;
+  fnEl.textContent  = `outbound_${outbound_id}.json`;
+  dlLink.style.display = 'none'; // no download endpoint for outbound yet
+  try {
+    const resp = await fetch(`${API}/api/v1/outbound/payload/${outbound_id}`);
+    const json = await resp.json();
+    viewer.textContent = JSON.stringify(json, null, 2);
+  } catch(e) {
+    viewer.textContent = `Error loading payload: ${e.message}`;
+  }
+}
 
 loadStats(); loadQueue('all');
 setInterval(loadStats, 30000);

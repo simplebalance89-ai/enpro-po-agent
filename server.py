@@ -64,6 +64,8 @@ from services.processing.cism_so_generator import generate_cism_so
 from services.processing.crosswalk_learner import learn_from_approval
 from services.processing import local_store
 from services.processing.cism_batch import add_to_batch, get_batch_status, clear_batch
+from services.processing import outbound_store
+from services.processing.outbound_mapper import build_payload as build_outbound_payload
 
 settings = get_settings()
 
@@ -1810,3 +1812,123 @@ async def list_item_master(limit: int = 100):
         "default_supplier_id": r.get("default_supplier_id"),
         "supplier_name": r.get("supplier_name"),
     } for r in rows]
+
+
+# ── Outbound Sync ─────────────────────────────────────────────────────────────
+
+@app.get("/api/v1/outbound/queue")
+async def get_outbound_queue(status: Optional[str] = None):
+    """List all outbound sync records, optionally filtered by status."""
+    return outbound_store.list_records(status=status)
+
+
+@app.post("/api/v1/outbound/prepare/{intake_id}")
+async def prepare_outbound(intake_id: str, _auth=Depends(_require_api_key)):
+    """Build outbound payload from existing PO data. Idempotent — safe to re-run."""
+    po = local_store.get_po(intake_id)
+    if not po:
+        raise HTTPException(404, f"PO {intake_id} not found")
+
+    # Resolve source system — normalise to ariba or coupa
+    raw_source = (po.get("source") or "ariba").lower()
+    source_system = "coupa" if "coupa" in raw_source else "ariba"
+
+    # Derive customer_id from wherever it was stored
+    cust_match = po.get("customer_match") or {}
+    header = po.get("header") or {}
+    customer_id = (
+        cust_match.get("p21_id")
+        or cust_match.get("p21_customer_id")
+        or header.get("customer_id_p21")
+        or ""
+    )
+
+    # Sum line totals for amount_total
+    lines = po.get("lines", [])
+    amount_total = round(
+        sum((l.get("qty_ordered") or 0) * (l.get("unit_price") or 0) for l in lines),
+        2,
+    )
+
+    p21_order_no = po.get("p21_order_no") or header.get("p21_order_no", "")
+
+    existing = outbound_store.get_by_intake(intake_id)
+    if existing:
+        outbound_store.update_record(existing["outbound_id"], {
+            "amount_total": amount_total,
+            "customer_id": customer_id,
+            "p21_order_no": p21_order_no,
+            "source_system": source_system,
+        })
+        record = outbound_store.get_record(existing["outbound_id"])
+    else:
+        record = outbound_store.create_record(
+            intake_id=intake_id,
+            source_system=source_system,
+            po_no=po.get("po_no", ""),
+            p21_order_no=p21_order_no,
+            customer_id=customer_id,
+            amount_total=amount_total,
+        )
+
+    # Build and persist payload
+    payload = build_outbound_payload(source_system, record, po)
+    outbound_store.update_record(record["outbound_id"], {
+        "payload": payload,
+        "status": "ready",
+    })
+    record = outbound_store.get_record(record["outbound_id"])
+    return {"outbound_id": record["outbound_id"], "status": "ready", "record": record}
+
+
+@app.get("/api/v1/outbound/payload/{outbound_id}")
+async def get_outbound_payload(outbound_id: str):
+    """Return the shaped outbound payload JSON for preview."""
+    record = outbound_store.get_record(outbound_id)
+    if not record:
+        raise HTTPException(404, f"Outbound record {outbound_id} not found")
+    return record.get("payload") or {}
+
+
+@app.post("/api/v1/outbound/send/{outbound_id}")
+async def send_outbound(outbound_id: str, _auth=Depends(_require_api_key)):
+    """Mock send — marks record as sent with stub acknowledgment. No live posting."""
+    record = outbound_store.get_record(outbound_id)
+    if not record:
+        raise HTTPException(404, f"Outbound record {outbound_id} not found")
+
+    if record["status"] == "sent":
+        return {"status": "sent", "outbound_id": outbound_id, "mock": True,
+                "message": "Already sent (idempotent)."}
+
+    if record["status"] not in ("ready", "failed"):
+        raise HTTPException(
+            400,
+            f"Cannot send: record is '{record['status']}'. Run prepare first."
+        )
+
+    ack = f"MOCK-ACK-{outbound_id[-8:]}"
+    outbound_store.update_record(outbound_id, {
+        "status": "sent",
+        "last_error": "",
+        "sent_at": datetime.utcnow().isoformat(),
+        "mock_response": {
+            "stub": True,
+            "acknowledgment": ack,
+            "timestamp": datetime.utcnow().isoformat(),
+            "note": "Mock only — no live credentials configured.",
+        },
+    })
+    return {
+        "status": "sent",
+        "outbound_id": outbound_id,
+        "mock": True,
+        "acknowledgment": ack,
+        "message": "Mock send complete. Payload logged. No live posting.",
+    }
+
+
+@app.get("/api/v1/outbound/history")
+async def get_outbound_history(limit: int = 50):
+    """Return recent outbound sync activity (all non-pending records)."""
+    return outbound_store.get_history(limit=limit)
