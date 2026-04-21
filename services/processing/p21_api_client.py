@@ -340,7 +340,7 @@ class P21ApiClient:
         ship_to_id = defaults.get("ship_to_id") or header.get("ship_to_id_p21", "")
 
         header_edits_raw = [
-            {"Name": "customer_id", "Value": str(customer.get("p21_customer_id", ""))},
+            {"Name": "customer_id", "Value": str(customer.get("p21_id") or customer.get("p21_customer_id", ""))},
             {"Name": "po_no", "Value": str(header.get("po_no", ""))[:50]},
             {"Name": "ship_to_id", "Value": str(ship_to_id)},
             {"Name": "order_date", "Value": order_date},
@@ -472,7 +472,7 @@ class P21ApiClient:
             "order_no": order_no,
             "status": status,
             "po_no": po_no,
-            "customer_id": po_data.get("customer_match", {}).get("p21_customer_id", ""),
+            "customer_id": po_data.get("customer_match", {}).get("p21_id") or po_data.get("customer_match", {}).get("p21_customer_id", ""),
         }
         if errors:
             result["errors"] = errors
