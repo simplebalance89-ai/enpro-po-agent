@@ -913,6 +913,7 @@ async def batch_payload_preflight(req: BatchPayloadRequest):
             })
             continue
 
+        cust_id = cm.get("p21_id", "") or po.get("header", {}).get("customer_id_p21", "")
         included.append({
             "intake_id": intake_id,
             "po_no": po_no,
