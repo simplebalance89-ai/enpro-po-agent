@@ -26,6 +26,9 @@ import os
 from datetime import datetime
 from typing import Optional
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -222,6 +225,65 @@ async def intake_upload(
 
     payload = await _process_po_to_so(header, lines, raw, source, fmt)
     return payload
+
+
+# ── Intake: Poll Mailbox Now ─────────────────────────────────────────────────
+
+@app.post("/api/v1/intake/poll-now")
+async def poll_now():
+    """Trigger an immediate single poll of the configured mailbox.
+    Test button — no waiting for scheduled interval.
+    Returns how many emails were found and processed."""
+    from services.intake.email_poller import EmailPoller, GraphClient
+
+    poller = EmailPoller()
+    emails_found = 0
+    processed = 0
+    errors = []
+
+    async with GraphClient() as client:
+        emails = await poller.poll_once(client)
+        emails_found = len(emails)
+
+        for email in emails:
+            for att in email.attachments:
+                name_lower = att.name.lower()
+                try:
+                    if name_lower.endswith(".pdf") and att.content_bytes:
+                        import tempfile
+                        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                            tmp.write(att.content_bytes)
+                            tmp_path = tmp.name
+                        try:
+                            header, lines, raw = po_parser.parse_pdf(
+                                tmp_path,
+                                settings.doc_intel_endpoint,
+                                settings.doc_intel_key,
+                            )
+                        finally:
+                            os.unlink(tmp_path)
+                        await _process_po_to_so(header, lines, raw, "email", "pdf")
+                        processed += 1
+                    elif name_lower.endswith((".xml", ".cxml")) and att.content_bytes:
+                        header, lines, raw = po_parser.parse_cxml(
+                            att.content_bytes.decode("utf-8")
+                        )
+                        await _process_po_to_so(header, lines, raw, "email", "cxml")
+                        processed += 1
+                except Exception as e:
+                    errors.append({"attachment": att.name, "email": email.subject, "error": str(e)})
+                    logger.error(f"Failed to process {att.name} from '{email.subject}': {e}")
+
+            try:
+                await client.move_message(email.message_id, "Processed-PO")
+            except Exception as e:
+                logger.warning(f"Could not move '{email.subject}' to Processed-PO: {e}")
+
+    return {
+        "emails_found": emails_found,
+        "processed": processed,
+        "errors": errors,
+    }
 
 
 # ── Processing Pipeline ──────────────────────────────────────────────────────

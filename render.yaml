@@ -13,16 +13,32 @@ services:
       - key: ENVIRONMENT
         value: sandbox
       - key: AZURE_BLOB_CONNECTION_STRING
+        # Set manually in Render dashboard
         sync: false
       - key: AZURE_BLOB_CONTAINER_NAME
         value: ariba-coupa-sandbox
       - key: STAGING_SQL_SERVER
+        # Set manually in Render dashboard
         sync: false
       - key: STAGING_SQL_DATABASE
         value: po_staging_sandbox
       - key: STAGING_SQL_USERNAME
+        # Set manually in Render dashboard
         sync: false
       - key: STAGING_SQL_PASSWORD
+        # Set manually in Render dashboard
+        sync: false
+      - key: GRAPH_TENANT_ID
+        # Set manually in Render dashboard
+        sync: false
+      - key: GRAPH_CLIENT_ID
+        # Set manually in Render dashboard
+        sync: false
+      - key: GRAPH_CLIENT_SECRET
+        # Set manually in Render dashboard
+        sync: false
+      - key: GRAPH_MAILBOX
+        # Set manually in Render dashboard
         sync: false
     disk:
       name: data

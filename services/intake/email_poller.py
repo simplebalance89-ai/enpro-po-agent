@@ -301,18 +301,88 @@ class EmailPoller:
                 await asyncio.sleep(POLL_INTERVAL_SECONDS)
     
     async def _default_process(self, email: EmailMessage, client: GraphClient):
-        """Default processing: log and move to processed folder."""
-        self.logger.info(f"Processing {email.subject}")
-        
-        # TODO: Route to parser based on format (cXML, PDF, text)
-        
-        # Move to processed folder
+        """Default processing: route attachments to parser → save to review queue → move."""
+        self.logger.info(f"Processing: {email.subject}")
+
+        for att in email.attachments:
+            name_lower = att.name.lower()
+            try:
+                if name_lower.endswith(".pdf") and att.content_bytes:
+                    await self._route_pdf(att, email)
+                elif name_lower.endswith((".xml", ".cxml")) and att.content_bytes:
+                    await self._route_cxml(att, email)
+                else:
+                    self.logger.debug(f"Skipping unsupported attachment: {att.name}")
+            except Exception as e:
+                self.logger.error(f"Failed to process attachment {att.name}: {e}")
+
         try:
             await client.move_message(email.message_id, PROCESSED_FOLDER)
             self.logger.info(f"Moved to {PROCESSED_FOLDER}: {email.subject}")
         except Exception as e:
             self.logger.error(f"Failed to move message: {e}")
-    
+
+    async def _route_pdf(self, att: EmailAttachment, email: EmailMessage):
+        """Parse a PDF attachment and save to local review queue."""
+        import tempfile
+        from config import get_settings
+        from services.processing import local_store
+        from services.processing.duplicate_detector import generate_intake_id
+        import po_parser
+
+        settings = get_settings()
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(att.content_bytes)
+            tmp_path = tmp.name
+        try:
+            header, lines, raw = po_parser.parse_pdf(
+                tmp_path, settings.doc_intel_endpoint, settings.doc_intel_key
+            )
+            intake_id = generate_intake_id(header.po_no or att.name, email.sender_email, "email")
+            local_store.save_po(intake_id, {
+                "intake_id": intake_id,
+                "po_no": header.po_no,
+                "source": "email",
+                "format": "pdf",
+                "email_subject": email.subject,
+                "sender": email.sender_email,
+                "attachment_name": att.name,
+                "review_status": "pending",
+                "confidence": "red",
+                "header": header.model_dump() if hasattr(header, "model_dump") else vars(header),
+                "lines": [
+                    (l.model_dump() if hasattr(l, "model_dump") else vars(l)) for l in lines
+                ],
+            })
+            self.logger.info(f"Saved PDF PO {header.po_no} (intake_id={intake_id}) to review queue")
+        finally:
+            os.unlink(tmp_path)
+
+    async def _route_cxml(self, att: EmailAttachment, email: EmailMessage):
+        """Parse a cXML attachment and save to local review queue."""
+        from services.processing import local_store
+        from services.processing.duplicate_detector import generate_intake_id
+        import po_parser
+
+        header, lines, raw = po_parser.parse_cxml(att.content_bytes.decode("utf-8"))
+        intake_id = generate_intake_id(header.po_no or att.name, email.sender_email, "email")
+        local_store.save_po(intake_id, {
+            "intake_id": intake_id,
+            "po_no": header.po_no,
+            "source": "email",
+            "format": "cxml",
+            "email_subject": email.subject,
+            "sender": email.sender_email,
+            "attachment_name": att.name,
+            "review_status": "pending",
+            "confidence": "red",
+            "header": header.model_dump() if hasattr(header, "model_dump") else vars(header),
+            "lines": [
+                (l.model_dump() if hasattr(l, "model_dump") else vars(l)) for l in lines
+            ],
+        })
+        self.logger.info(f"Saved cXML PO {header.po_no} (intake_id={intake_id}) to review queue")
+
     def stop(self):
         """Stop polling."""
         self.running = False
