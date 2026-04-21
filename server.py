@@ -746,7 +746,11 @@ async def download_p21_payload(intake_id: str):
         po["customer_defaults"] = {}
 
     from services.processing.p21_api_client import build_p21_payload
-    payload = build_p21_payload(po)
+    import traceback as _tb
+    try:
+        payload = build_p21_payload(po)
+    except Exception as _e:
+        return JSONResponse(status_code=500, content={"error": str(_e), "trace": _tb.format_exc()})
 
     po_no = po.get("header", {}).get("po_no", intake_id)
     return JSONResponse(
