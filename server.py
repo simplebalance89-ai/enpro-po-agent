@@ -210,10 +210,12 @@ async def intake_upload(
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
-        header, lines, raw = po_parser.parse_pdf(
-            tmp_path, settings.doc_intel_endpoint, settings.doc_intel_key
-        )
-        os.unlink(tmp_path)
+        try:
+            header, lines, raw = po_parser.parse_pdf(
+                tmp_path, settings.doc_intel_endpoint, settings.doc_intel_key
+            )
+        finally:
+            os.unlink(tmp_path)
         fmt = "pdf"
     else:
         raise HTTPException(400, "Unsupported file type. Upload .xml, .csv, or .pdf")
@@ -1500,7 +1502,7 @@ async def list_po_history(customer_id: str = "", limit: int = 100):
     """List PO-to-SO history."""
     engine = _get_customer_engine()
     if customer_id:
-        rows = engine.po_history.get("", [])  # indexed by po_no, not customer
+        rows = engine.po_history.get(customer_id, [])
         rows = [r for r in rows if r.get("p21_customer_id") == customer_id][:limit]
     else:
         rows = []

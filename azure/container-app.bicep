@@ -46,6 +46,36 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           identity: 'system'
         }
         {
+          name: 'staging-sql-server'
+          keyVaultUrl: 'https://${keyVaultName}.vault.azure.net/secrets/staging-sql-server'
+          identity: 'system'
+        }
+        {
+          name: 'staging-sql-username'
+          keyVaultUrl: 'https://${keyVaultName}.vault.azure.net/secrets/staging-sql-username'
+          identity: 'system'
+        }
+        {
+          name: 'staging-sql-password'
+          keyVaultUrl: 'https://${keyVaultName}.vault.azure.net/secrets/staging-sql-password'
+          identity: 'system'
+        }
+        {
+          name: 'p21-base-url'
+          keyVaultUrl: 'https://${keyVaultName}.vault.azure.net/secrets/p21-base-url'
+          identity: 'system'
+        }
+        {
+          name: 'p21-api-username'
+          keyVaultUrl: 'https://${keyVaultName}.vault.azure.net/secrets/p21-api-username'
+          identity: 'system'
+        }
+        {
+          name: 'p21-api-password'
+          keyVaultUrl: 'https://${keyVaultName}.vault.azure.net/secrets/p21-api-password'
+          identity: 'system'
+        }
+        {
           name: 'doc-intel-key'
           keyVaultUrl: 'https://${keyVaultName}.vault.azure.net/secrets/doc-intel-key'
           identity: 'system'
@@ -72,6 +102,12 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'BLOB_ACCOUNT_URL', value: 'https://enproaidatav1.blob.core.windows.net' }
             { name: 'BLOB_CONTAINER', value: 'ariba-coupa' }
             { name: 'BLOB_CONNECTION_STRING', secretRef: 'blob-connection-string' }
+            { name: 'STAGING_SQL_SERVER', secretRef: 'staging-sql-server' }
+            { name: 'STAGING_SQL_USERNAME', secretRef: 'staging-sql-username' }
+            { name: 'STAGING_SQL_PASSWORD', secretRef: 'staging-sql-password' }
+            { name: 'P21_BASE_URL', secretRef: 'p21-base-url' }
+            { name: 'P21_API_USERNAME', secretRef: 'p21-api-username' }
+            { name: 'P21_API_PASSWORD', secretRef: 'p21-api-password' }
             { name: 'DOC_INTEL_ENDPOINT', value: 'https://enpro-filtration-ai.cognitiveservices.azure.com/' }
             { name: 'DOC_INTEL_KEY', secretRef: 'doc-intel-key' }
             { name: 'AZURE_OPENAI_ENDPOINT', value: 'https://enpro-filtration-ai.cognitiveservices.azure.com/' }

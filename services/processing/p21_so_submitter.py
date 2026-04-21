@@ -84,8 +84,51 @@ async def submit_to_p21(po_data: dict) -> dict:
         from services.processing.cism_batch import add_to_batch
         settings = get_settings()
 
+        header = po_data.get("header", {}) or {}
+        customer_match = po_data.get("customer_match", {}) or {}
+        customer_defaults = po_data.get("customer_defaults", {}) or {}
+        lines = po_data.get("lines", []) or []
+
+        cism_lines = []
+        for line in lines:
+            cism_lines.append({
+                "item_id": line.get("item_id_p21") or line.get("inv_mast_uid") or line.get("supplier_part_id", ""),
+                "qty_ordered": line.get("qty_ordered", 0),
+                "unit_of_measure": line.get("unit_of_measure", "EA"),
+                "unit_price": line.get("unit_price", 0),
+                "item_description": line.get("item_description", ""),
+                "product_group": line.get("product_group", ""),
+                "required_date": line.get("required_date", "") or line.get("date_due", ""),
+                "supplier_part_id": line.get("supplier_part_id", ""),
+                "inv_mast_uid": line.get("item_id_p21") or line.get("inv_mast_uid", ""),
+                "line_no": line.get("line_no", 0),
+            })
+
         cism_result = generate_cism_so(
-            po_data=po_data,
+            p21_customer_id=customer_match.get("p21_id", ""),
+            p21_customer_name=customer_match.get("name", ""),
+            p21_ship_to_id=customer_defaults.get("address_id", ""),
+            po_no=header.get("po_no", ""),
+            order_date=header.get("order_date", ""),
+            requested_date=header.get("date_due", ""),
+            ship2_name=header.get("ship2_name", ""),
+            ship2_add1=header.get("ship2_add1", ""),
+            ship2_add2=header.get("ship2_add2", ""),
+            ship2_city=header.get("ship2_city", ""),
+            ship2_state=header.get("ship2_state", ""),
+            ship2_zip=header.get("ship2_zip", ""),
+            ship2_country=header.get("ship2_country", "US"),
+            ship2_email=header.get("buyer_email", ""),
+            contact_id=customer_defaults.get("contact_id", ""),
+            contact_name=header.get("buyer", "") or customer_match.get("name", ""),
+            taker=settings.p21_default_taker,
+            terms=customer_defaults.get("terms_id", ""),
+            carrier_id=customer_defaults.get("carrier_id", ""),
+            delivery_instructions=header.get("comments", "") or header.get("po_desc", ""),
+            approved="Y",
+            class_1=customer_defaults.get("class_1id", ""),
+            source_id=po_data.get("source", ""),
+            lines=cism_lines,
             output_dir=settings.cism_so_output_dir,
         )
 
@@ -97,5 +140,5 @@ async def submit_to_p21(po_data: dict) -> dict:
             "order_no": "",
             "status": "success",
             "message": "CISM files generated (P21 API not configured)",
-            "cism_path": cism_result.get("output_dir", ""),
+            "cism_path": cism_result.get("header_path", ""),
         }
