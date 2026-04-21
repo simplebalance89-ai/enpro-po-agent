@@ -602,7 +602,8 @@ async function approvePO(id) {
     const ar = await resp.json();
     const pvStatus = ar.payload_validation?.status === 'batch_ready' ? 'Batch Ready ✓' : 'Needs Fix — ' + (ar.payload_validation?.errors||[]).map(e=>e.message||e.code).join('; ');
     alert(`Approved — ${pvStatus}`);
-    loadQueue(currentFilter); loadStats();
+    _preflightRan = false;
+    loadQueue(currentFilter); loadStats(); loadPayloads();
     selectedId = null;
     document.getElementById('detailPanel').innerHTML = '<div class="empty">Select a PO from the queue to review</div>';
   } catch(e) { alert('Error: ' + e.message); }
@@ -1101,6 +1102,7 @@ async function loadPayloads() {
         <a class="btn btn-gray" style="padding:4px 10px;font-size:11px;text-decoration:none;" href="${API}/api/v1/p21/payload/${r.intake_id}/download" download="${r.filename}">Download</a>
       </td>
     </tr>`).join('');
+    updateBatchBtn();
   } catch(e) { console.error('loadPayloads error:', e); }
 }
 
