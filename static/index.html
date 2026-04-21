@@ -112,6 +112,14 @@ details.help-section[open] > summary .arrow { transform:rotate(90deg); }
 .preflight-chip.included { background:#0d3320; color:#4ade80; }
 .preflight-chip.skipped  { background:#3b1111; color:#f87171; }
 .reason-badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:700; letter-spacing:.5px; background:#2d1b00; color:#fbbf24; font-family:monospace; }
+.badge-valid { display:inline-block; padding:2px 10px; border-radius:8px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+.badge-valid.batch_ready { background:#0d3320; color:#4ade80; }
+.badge-valid.needs_fix { background:#3b1111; color:#f87171; }
+.badge-valid.unknown { background:#1e2030; color:#64748b; }
+.validation-errors { margin-top:8px; padding:8px 12px; background:#1c0a0a; border:1px solid #3b1111; border-radius:6px; }
+.validation-errors .ve-title { font-size:10px; text-transform:uppercase; color:#f87171; letter-spacing:1px; font-weight:700; margin-bottom:4px; }
+.validation-errors .ve-item { font-size:12px; color:#fca5a5; padding:2px 0; }
+.validation-errors .ve-code { font-family:monospace; font-size:10px; background:#2d0f0f; padding:1px 5px; border-radius:3px; margin-right:5px; }
 </style>
 </head>
 <body>
@@ -394,7 +402,7 @@ details.help-section[open] > summary .arrow { transform:rotate(90deg); }
       <table id="payloadsTable" style="display:none;">
         <thead><tr>
           <th style="width:32px;"><input type="checkbox" id="selectAllPayloads" title="Select all" onchange="toggleSelectAll(this)"></th>
-          <th>PO No</th><th>Intake ID</th><th>Customer</th><th>Lines</th><th>Confidence</th><th>Status</th><th>Created</th><th>Actions</th>
+          <th>PO No</th><th>Intake ID</th><th>Customer</th><th>Lines</th><th>Confidence</th><th>Status</th><th>Validation</th><th>Created</th><th>Actions</th>
         </tr></thead>
         <tbody id="payloadsTbody"></tbody>
       </table>
@@ -549,6 +557,10 @@ function selectPO(id) {
   const eligible = isReadyToApprove(po);
   const missingReason = getMissingReason(po);
   const approveDisabled = !eligible ? `disabled style="opacity:0.4;cursor:not-allowed;" title="${missingReason}"` : '';
+  const pv = po.payload_validation || {};
+  const pvStatus = pv.status || 'unknown';
+  const pvErrors = pv.errors || [];
+  const pvBadge = `<span class="badge-valid ${pvStatus}">${pvStatus === 'batch_ready' ? 'Batch Ready' : pvStatus === 'needs_fix' ? 'Needs Fix' : 'Not Validated'}</span>`;
 
   panel.innerHTML =
     `<div class="sticky-action-bar">` +
@@ -558,6 +570,7 @@ function selectPO(id) {
         `<span style="color:#64748b;font-size:12px;">${po.source||''}</span>` +
         `<span style="color:#475569;font-size:12px;">· ${lines.length} lines</span>` +
         (h.customer_name_p21 ? `<span style="color:#94a3b8;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">· ${h.customer_name_p21}</span>` : `<span style="color:#f87171;font-size:12px;">· customer unmapped</span>`) +
+        `<span style="margin-left:4px;">${pvBadge}</span>` +
       `</div>` +
       `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">` +
         `<button class="btn btn-blue" onclick="editPO('${po.intake_id}')" style="padding:6px 14px;">Edit PO</button>` +
@@ -569,6 +582,7 @@ function selectPO(id) {
     `</div>` +
     `<div class="detail-content">` +
       `<div style="color:#94a3b8; font-size:13px; margin-bottom:12px;">${po.reason || ''}</div>` +
+      (pvErrors.length ? `<div class="validation-errors"><div class="ve-title">Payload validation errors</div>${pvErrors.map(e=>`<div class="ve-item"><span class="ve-code">${e.code}</span>${e.message}</div>`).join('')}</div>` : '') +
       `<div class="meta-grid">` +
         `<div class="meta-box"><div class="lbl">Customer (Ship-To)</div><div class="val">${h.ship2_name || po.ship_to || '-'}</div></div>` +
         `<div class="meta-box"><div class="lbl">P21 Customer</div><div class="val ${h.customer_id_p21 ? '' : 'warn'}">${h.customer_name_p21 || 'NOT MATCHED'} ${h.customer_id_p21 ? '('+h.customer_id_p21+')' : ''}</div></div>` +
@@ -1103,6 +1117,7 @@ async function loadPayloads() {
       <td style="text-align:center;">${r.lines_count||0}</td>
       <td><span class="badge-conf ${r.confidence}">${(r.confidence||'').toUpperCase()}</span></td>
       <td style="color:${r.review_status==='approved'?'#4ade80':r.review_status==='rejected'?'#f87171':'#fbbf24'};font-weight:600;font-size:12px;">${(r.review_status||'pending').toUpperCase()}</td>
+      <td>${(()=>{const pv=r.payload_validation||{};const s=pv.status||'unknown';return `<span class="badge-valid ${s}">${s==='batch_ready'?'Batch Ready':s==='needs_fix'?'Needs Fix':'—'}</span>`})()}</td>
       <td style="font-size:11px;color:#64748b;">${r.created_at?r.created_at.substring(0,16).replace('T',' '):'-'}</td>
       <td style="white-space:nowrap;">
         <button class="btn btn-blue" style="padding:4px 10px;font-size:11px;" onclick="viewPayload('${r.intake_id}','${r.po_no}','${r.filename}')">View JSON</button>
@@ -1171,15 +1186,17 @@ async function runPreflight() {
 function renderPreflightPanel(data) {
   const panel = document.getElementById('preflightPanel');
   const rcColor = { NOT_FOUND:'#f87171', NOT_APPROVED:'#fbbf24', MISSING_CUSTOMER_ID:'#f87171', NO_VALID_LINE_ITEMS:'#f87171', BUILD_ERROR:'#f87171' };
-  const includedRows = (data.included || []).map(i =>
-    `<tr>
+  const includedRows = (data.included || []).map(i => {
+    const pvs = (i.validation_status || 'batch_ready');
+    return `<tr>
       <td style="font-weight:600;color:#fff;">${i.po_no}</td>
       <td>${i.customer || '—'}</td>
       <td style="text-align:center;">${i.lines}</td>
       <td><span class="badge-conf ${i.confidence}">${(i.confidence||'').toUpperCase()}</span></td>
       <td style="color:#4ade80;font-weight:600;font-size:11px;">${(i.status||'').toUpperCase()}</td>
-    </tr>`
-  ).join('');
+      <td><span class="badge-valid ${pvs}">${pvs==='batch_ready'?'Batch Ready':pvs==='needs_fix'?'Needs Fix':'—'}</span></td>
+    </tr>`;
+  }).join('');
   const skippedRows = (data.skipped || []).map(s =>
     `<tr>
       <td style="font-weight:600;color:#fff;">${s.po_no || s.intake_id}</td>
@@ -1198,7 +1215,7 @@ function renderPreflightPanel(data) {
   if (data.included_count > 0) {
     html += `<div style="font-size:11px;text-transform:uppercase;color:#4ade80;letter-spacing:1px;margin-bottom:6px;font-weight:700;">Will be included (${data.included_count})</div>`;
     html += `<div class="scroll-table" style="max-height:180px;margin-bottom:14px;"><table style="font-size:12px;">
-      <tr><th>PO #</th><th>Customer</th><th>Lines</th><th>Conf</th><th>Status</th></tr>
+      <tr><th>PO #</th><th>Customer</th><th>Lines</th><th>Conf</th><th>Status</th><th>Validation</th></tr>
       ${includedRows}
     </table></div>`;
   } else {
