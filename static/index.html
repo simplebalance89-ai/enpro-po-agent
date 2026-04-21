@@ -331,12 +331,17 @@ tr:hover { background: #141620; }
 <!-- P21 PAYLOADS -->
 <div class="tab-panel" id="panel-payloads">
   <div class="xw-section">
-    <h3>P21 Transaction API Payloads</h3>
-    <p class="desc">All ingested POs. Click <strong>View JSON</strong> to inspect the payload, <strong>Download</strong> to save the file.</p>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px;">
+      <h3 style="margin:0;">P21 Transaction API Payloads</h3>
+      <button id="batchDownloadBtn" class="btn btn-blue" style="padding:6px 14px;font-size:12px;" disabled onclick="downloadBatchPayload()">Download Batch JSON</button>
+    </div>
+    <p class="desc" style="margin-top:6px;">All ingested POs. Click <strong>View JSON</strong> to inspect the payload, <strong>Download</strong> to save the file. Check rows and use <strong>Download Batch JSON</strong> to export multiple POs at once.</p>
+    <div id="batchNotice" style="display:none;margin-bottom:10px;padding:8px 12px;border-radius:6px;font-size:12px;background:#1a1d27;border:1px solid #2a2d3a;color:#a5f3fc;"></div>
     <div id="payloadsEmpty" class="empty" style="display:none;">No POs found.</div>
     <div class="scroll-table">
       <table id="payloadsTable" style="display:none;">
         <thead><tr>
+          <th style="width:32px;"><input type="checkbox" id="selectAllPayloads" title="Select all" onchange="toggleSelectAll(this)"></th>
           <th>PO No</th><th>Intake ID</th><th>Customer</th><th>Lines</th><th>Confidence</th><th>Status</th><th>Created</th><th>Actions</th>
         </tr></thead>
         <tbody id="payloadsTbody"></tbody>
@@ -945,6 +950,7 @@ async function loadPayloads() {
     if (!data.length) { empty.style.display='block'; tbl.style.display='none'; return; }
     empty.style.display='none'; tbl.style.display='table';
     tbody.innerHTML = data.map(r => `<tr>
+      <td style="text-align:center;"><input type="checkbox" class="payload-check" value="${r.intake_id}" onchange="updateBatchBtn()"></td>
       <td style="font-weight:600;color:#fff;">${r.po_no||'-'}</td>
       <td style="font-family:monospace;font-size:11px;color:#64748b;">${r.intake_id}</td>
       <td>${r.customer_name||'-'} ${r.customer_id ? '<span style="color:#64748b;font-size:11px;">('+r.customer_id+')</span>' : ''}</td>
@@ -958,6 +964,77 @@ async function loadPayloads() {
       </td>
     </tr>`).join('');
   } catch(e) { console.error('loadPayloads error:', e); }
+}
+
+function toggleSelectAll(cb) {
+  document.querySelectorAll('.payload-check').forEach(c => { c.checked = cb.checked; });
+  updateBatchBtn();
+}
+
+function updateBatchBtn() {
+  const checked = document.querySelectorAll('.payload-check:checked').length;
+  document.getElementById('batchDownloadBtn').disabled = checked === 0;
+  const sa = document.getElementById('selectAllPayloads');
+  const all = document.querySelectorAll('.payload-check').length;
+  if (sa) sa.indeterminate = checked > 0 && checked < all;
+  if (sa) sa.checked = all > 0 && checked === all;
+}
+
+async function downloadBatchPayload() {
+  const ids = Array.from(document.querySelectorAll('.payload-check:checked')).map(c => c.value);
+  if (!ids.length) return;
+  const notice = document.getElementById('batchNotice');
+  notice.style.display = 'block';
+  notice.textContent = 'Validating batch…';
+
+  try {
+    const summaryResp = await fetch(`${API}/api/v1/p21/payload/batch`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({intake_ids: ids, approved_only: true}),
+    });
+    const summary = await summaryResp.json();
+
+    if (!summaryResp.ok) {
+      const detail = summary.detail || summary;
+      const skipped = (detail.skipped_reasons || []).map(s => `${s.po_no||s.intake_id}: ${s.reason}`).join('; ');
+      notice.style.color = '#f87171';
+      notice.textContent = `No POs passed validation. Skipped: ${skipped || 'unknown'}`;
+      return;
+    }
+
+    let msg = `Included ${summary.included_count} of ${summary.selected_count} selected.`;
+    if (summary.skipped_count > 0) {
+      const reasons = summary.skipped_reasons.map(s => `${s.po_no||s.intake_id}: ${s.reason}`).join('; ');
+      msg += ` Skipped ${summary.skipped_count}: ${reasons}`;
+    }
+    notice.style.color = '#a5f3fc';
+    notice.textContent = msg;
+
+    if (summary.included_count === 0) return;
+
+    const dlResp = await fetch(`${API}/api/v1/p21/payload/batch/download`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({intake_ids: ids, approved_only: true}),
+    });
+    if (!dlResp.ok) {
+      notice.style.color = '#f87171';
+      notice.textContent += ' Download failed.';
+      return;
+    }
+    const cd = dlResp.headers.get('Content-Disposition') || '';
+    const fnMatch = cd.match(/filename="?([^"]+)"?/);
+    const filename = fnMatch ? fnMatch[1] : 'p21_batch.json';
+    const blob = await dlResp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    notice.style.color = '#f87171';
+    notice.textContent = 'Batch request failed: ' + e.message;
+  }
 }
 
 async function viewPayload(intakeId, poNo, filename) {

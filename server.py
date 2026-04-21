@@ -799,6 +799,123 @@ async def download_p21_payload(intake_id: str):
     )
 
 
+class BatchPayloadRequest(BaseModel):
+    intake_ids: list
+    approved_only: bool = True
+
+
+@app.post("/api/v1/p21/payload/batch")
+async def batch_payload_summary(req: BatchPayloadRequest):
+    """Validate a batch of POs and return included/skipped counts without downloading."""
+    from services.processing.p21_api_client import build_p21_payload
+    import json as _json
+
+    selected_count = len(req.intake_ids)
+    included = []
+    skipped = []
+
+    for intake_id in req.intake_ids:
+        po = local_store.get_po(intake_id)
+        if not po:
+            skipped.append({"intake_id": intake_id, "po_no": "", "reason": "not found in store"})
+            continue
+
+        po_no = po.get("po_no") or po.get("header", {}).get("po_no", intake_id)
+
+        if req.approved_only and po.get("review_status") != "approved":
+            skipped.append({"intake_id": intake_id, "po_no": po_no, "reason": f"status is {po.get('review_status', 'unknown')}, not approved"})
+            continue
+
+        cust_id = po.get("customer_match", {}).get("p21_id", "")
+        if not cust_id:
+            skipped.append({"intake_id": intake_id, "po_no": po_no, "reason": "no customer ID"})
+            continue
+
+        lines = po.get("lines", [])
+        if not any(ln.get("item_id_p21", "") for ln in lines):
+            skipped.append({"intake_id": intake_id, "po_no": po_no, "reason": "no valid line items"})
+            continue
+
+        included.append(intake_id)
+
+    if not included and skipped:
+        raise HTTPException(status_code=422, detail={"message": "No POs passed validation", "skipped_reasons": skipped})
+
+    return {
+        "selected_count": selected_count,
+        "included_count": len(included),
+        "skipped_count": len(skipped),
+        "skipped_reasons": skipped,
+    }
+
+
+@app.post("/api/v1/p21/payload/batch/download")
+async def batch_payload_download(req: BatchPayloadRequest):
+    """Build and download a merged P21 batch payload for a set of POs."""
+    from services.processing.p21_api_client import build_p21_payload
+    import json as _json
+    from starlette.responses import Response
+    from datetime import datetime as _dt
+
+    included = []
+    transactions = []
+    skipped = []
+
+    for intake_id in req.intake_ids:
+        po = local_store.get_po(intake_id)
+        if not po:
+            skipped.append({"intake_id": intake_id, "po_no": "", "reason": "not found in store"})
+            continue
+
+        po_no = po.get("po_no") or po.get("header", {}).get("po_no", intake_id)
+
+        if req.approved_only and po.get("review_status") != "approved":
+            skipped.append({"intake_id": intake_id, "po_no": po_no, "reason": f"status is {po.get('review_status', 'unknown')}, not approved"})
+            continue
+
+        cust_id = po.get("customer_match", {}).get("p21_id", "")
+        if not cust_id:
+            skipped.append({"intake_id": intake_id, "po_no": po_no, "reason": "no customer ID"})
+            continue
+
+        lines = po.get("lines", [])
+        if not any(ln.get("item_id_p21", "") for ln in lines):
+            skipped.append({"intake_id": intake_id, "po_no": po_no, "reason": "no valid line items"})
+            continue
+
+        try:
+            engine = _get_customer_engine()
+            po["customer_defaults"] = engine.get_customer_defaults(cust_id)
+        except Exception:
+            po["customer_defaults"] = {}
+
+        try:
+            single_payload = build_p21_payload(po)
+            txn = single_payload.get("Transactions", [{}])[0]
+            transactions.append(txn)
+            included.append(intake_id)
+        except Exception as exc:
+            skipped.append({"intake_id": intake_id, "po_no": po_no, "reason": f"build error: {exc}"})
+
+    if not transactions:
+        raise HTTPException(status_code=422, detail={"message": "No POs passed validation", "skipped_reasons": skipped})
+
+    batch_payload = {
+        "Name": "Order",
+        "UseCodeValues": False,
+        "Transactions": transactions,
+    }
+
+    ts = _dt.utcnow().strftime("%Y%m%d_%H%M%S")
+    filename = f"p21_payload_batch_{ts}_{len(transactions)}.json"
+
+    return Response(
+        content=_json.dumps(batch_payload).encode("utf-8"),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @app.get("/api/v1/p21/payloads")
 async def list_p21_payloads():
     """List all POs that have a downloadable P21 payload, with metadata."""
