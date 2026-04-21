@@ -1,44 +1,49 @@
-# Render.com deployment for Ariba/Coupa Agent (SANDBOX)
+# Render.com deployment — enpro-po-agent
+# Runtime: Docker (uses Dockerfile in repo root, pinned to Debian 12 bookworm)
+# Service is managed via the Render dashboard; this file documents intent only.
 services:
   - type: web
-    name: ariba-coupa-agent-sandbox
-    runtime: python
+    name: enpro-po-agent
+    runtime: docker
     plan: starter
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
       - key: ENVIRONMENT
-        value: sandbox
-      - key: AZURE_BLOB_CONNECTION_STRING
-        # Set manually in Render dashboard
-        sync: false
+        value: production
       - key: AZURE_BLOB_CONTAINER_NAME
-        value: ariba-coupa-sandbox
-      - key: STAGING_SQL_SERVER
-        # Set manually in Render dashboard
+        value: ariba-coupa
+      # ── Secrets: set in Render dashboard, never here ──────────────────────
+      - key: AZURE_BLOB_CONNECTION_STRING
         sync: false
-      - key: STAGING_SQL_DATABASE
-        value: po_staging_sandbox
-      - key: STAGING_SQL_USERNAME
-        # Set manually in Render dashboard
+      - key: DOC_INTEL_ENDPOINT
         sync: false
-      - key: STAGING_SQL_PASSWORD
-        # Set manually in Render dashboard
+      - key: DOC_INTEL_KEY
+        sync: false
+      - key: AZURE_OPENAI_ENDPOINT
+        sync: false
+      - key: AZURE_OPENAI_KEY
+        sync: false
+      - key: AZURE_OPENAI_MODEL
         sync: false
       - key: GRAPH_TENANT_ID
-        # Set manually in Render dashboard
         sync: false
       - key: GRAPH_CLIENT_ID
-        # Set manually in Render dashboard
         sync: false
       - key: GRAPH_CLIENT_SECRET
-        # Set manually in Render dashboard
         sync: false
       - key: GRAPH_MAILBOX
-        # Set manually in Render dashboard
+        sync: false
+      - key: AZURE_TENANT_ID
+        sync: false
+      - key: AZURE_CLIENT_ID
+        sync: false
+      - key: AZURE_CLIENT_SECRET
+        sync: false
+      - key: P21_BASE_URL
+        sync: false
+      - key: P21_API_USERNAME
+        sync: false
+      - key: P21_API_PASSWORD
         sync: false
     disk:
       name: data

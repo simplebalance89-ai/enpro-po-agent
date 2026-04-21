@@ -4,11 +4,60 @@ This file is the source of truth for environment variables used by the app in Re
 
 Rule:
 - Safe, non-secret defaults may live in `render.yaml`.
-- Credentials, secrets, and connection-string-style values must be set manually in the Render dashboard and never committed.
+- Credentials, secrets, and endpoints must be set manually in the Render dashboard and never committed.
 
-## Safe in `render.yaml` (non-secret defaults)
+## Runtime note
 
-- `PYTHON_VERSION`
+The production service (`enpro-po-agent`) uses **Docker** runtime (not Python native).
+The Dockerfile in the repo root handles all build steps including ODBC driver installation.
+`render.yaml` documents intent; the live service is configured via the Render dashboard.
+
+## Must be set manually in Render dashboard (never in any committed file)
+
+### Azure Blob Storage
+- `AZURE_BLOB_CONNECTION_STRING`
+
+### Azure Document Intelligence (required for PDF PO parsing)
+- `DOC_INTEL_ENDPOINT`
+- `DOC_INTEL_KEY`
+
+### Azure OpenAI (optional — AI-assisted field mapping)
+- `AZURE_OPENAI_ENDPOINT`
+- `AZURE_OPENAI_KEY`
+- `AZURE_OPENAI_MODEL`
+
+### Microsoft Graph API (email poller)
+The app supports both `AZURE_*` and `GRAPH_*` naming conventions.
+- `GRAPH_TENANT_ID`
+- `GRAPH_CLIENT_ID`
+- `GRAPH_CLIENT_SECRET`
+- `GRAPH_MAILBOX`
+- `AZURE_TENANT_ID` (alias — set to same tenant as GRAPH_TENANT_ID)
+- `AZURE_CLIENT_ID` (alias — set to same app as GRAPH_CLIENT_ID)
+- `AZURE_CLIENT_SECRET` (alias — set to same secret as GRAPH_CLIENT_SECRET)
+
+### P21 Transaction API
+- `P21_BASE_URL`
+- `P21_API_USERNAME`
+- `P21_API_PASSWORD`
+
+### SQL / DB (optional)
+- `STAGING_SQL_SERVER`
+- `STAGING_SQL_USERNAME`
+- `STAGING_SQL_PASSWORD`
+- `P21_SQL_SERVER`
+- `P21_SQL_DATABASE`
+- `P21_SQL_UID`
+- `P21_SQL_PWD`
+
+### Dynamics 365 CRM (optional)
+- `DYNAMICS_ORG_URL`
+- `DYNAMICS_CLIENT_ID`
+- `DYNAMICS_CLIENT_SECRET`
+- `DYNAMICS_TENANT_ID`
+
+## Safe to set in render.yaml (non-secret defaults)
+
 - `ENVIRONMENT`
 - `AZURE_BLOB_CONTAINER_NAME`
 - `STAGING_SQL_DATABASE`
@@ -16,13 +65,6 @@ Rule:
 - `CISM_OUTPUT_DIR`
 - `CISM_SO_OUTPUT_DIR`
 - `PO_STORE_DIR`
-- `P21_DATA_DIR`
-- `QUOTE_DATA_DIR`
-- `AZURE_BLOB_APPROVED_PREFIX`
-- `AZURE_BLOB_REJECTED_PREFIX`
-- `CISM_BATCH_DIR`
-- `CROSSWALK_VENDOR_CSV`
-- `CROSSWALK_ITEM_CSV`
 - `P21_VERIFY_SSL`
 - `P21_DEFAULT_TAKER`
 - `P21_COMPANY_ID`
@@ -30,47 +72,9 @@ Rule:
 - `POLL_INTERVAL`
 - `GRAPH_POLL_INTERVAL`
 
-## Must be set manually in Render dashboard (never in file)
-
-- `AZURE_BLOB_CONNECTION_STRING` (connection string secret)
-- `STAGING_SQL_SERVER` (internal endpoint; treat as sensitive infra config)
-- `STAGING_SQL_USERNAME` (credential)
-- `STAGING_SQL_PASSWORD` (credential)
-- `DOC_INTEL_ENDPOINT` (service endpoint; keep with related secret config)
-- `DOC_INTEL_KEY` (secret)
-- `AZURE_OPENAI_ENDPOINT` (service endpoint; keep with related secret config)
-- `AZURE_OPENAI_KEY` (secret)
-- `AZURE_OPENAI_MODEL` (deployment-specific setting; keep with AOAI config)
-- `P21_BASE_URL` (internal service endpoint)
-- `P21_API_USERNAME` (credential)
-- `P21_API_PASSWORD` (credential)
-- `DYNAMICS_ORG_URL` (tenant/org endpoint)
-- `DYNAMICS_CLIENT_ID` (app identity)
-- `DYNAMICS_CLIENT_SECRET` (secret)
-- `DYNAMICS_TENANT_ID` (tenant identifier)
-- `P21_SQL_SERVER` (internal DB endpoint)
-- `P21_SQL_DATABASE` (DB target)
-- `P21_SQL_UID` (credential)
-- `P21_SQL_PWD` (credential)
-- `AZURE_TENANT_ID` (Graph auth alias)
-- `AZURE_CLIENT_ID` (Graph auth alias)
-- `AZURE_CLIENT_SECRET` (Graph auth alias secret)
-- `GRAPH_TENANT_ID` (Graph auth)
-- `GRAPH_CLIENT_ID` (Graph auth)
-- `GRAPH_CLIENT_SECRET` (Graph auth secret)
-- `GRAPH_MAILBOX` (target mailbox identity)
-
-## Current Graph/email poller values (for dashboard entry)
-
-- `GRAPH_TENANT_ID`: `cef9f0a2-ca34-41d0-a6e6-45631b486411`
-- `GRAPH_CLIENT_ID`: `bda7e772-b6b7-4b54-a0d9-6bd566b89e66`
-- `GRAPH_CLIENT_SECRET`: set from local `.env` value (do not commit)
-- `GRAPH_MAILBOX`: `PeterWilson@GCEstack.onmicrosoft.com`
-
 ## Notes
 
-- Email poller supports both naming conventions:
-  - `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET`
-  - `GRAPH_TENANT_ID` / `GRAPH_CLIENT_ID` / `GRAPH_CLIENT_SECRET`
-- Render provides `PORT` automatically; do not hardcode it in `render.yaml`.
+- Render provides `PORT` automatically; do not hardcode it.
 - `TEST_BASE_URL` is test-only and not required for Render runtime.
+- Without `DOC_INTEL_ENDPOINT` and `DOC_INTEL_KEY`, PDF PO parsing will fail with HTTP 401.
+  Set both in the dashboard to enable the full PDF intake flow.
