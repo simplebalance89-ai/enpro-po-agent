@@ -1932,3 +1932,9 @@ async def send_outbound(outbound_id: str, _auth=Depends(_require_api_key)):
 async def get_outbound_history(limit: int = 50):
     """Return recent outbound sync activity (all non-pending records)."""
     return outbound_store.get_history(limit=limit)
+
+
+@app.get("/api/v1/ui/config")
+async def get_ui_config():
+    """Return frontend config. Set ADMIN_PASSPHRASE env var to override the default."""
+    return {"admin_passphrase": os.environ.get("ADMIN_PASSPHRASE", "")}

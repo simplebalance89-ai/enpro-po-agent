@@ -84,12 +84,22 @@ tr:hover { background: #141620; }
 .badge-ob.ready    { background:#0d2d3a; color:#22d3ee; }
 .badge-ob.sent     { background:#0d3320; color:#4ade80; }
 .badge-ob.failed   { background:#3b1111; color:#f87171; }
+/* View mode */
+.mode-badge { display:inline-block; padding:3px 11px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; cursor:default; }
+.mode-badge.operator { background:#0d2d3a; color:#22d3ee; border:1px solid #164e63; }
+.mode-badge.admin    { background:#2d1b00; color:#fbbf24; border:1px solid #78350f; }
+.tab-group-label { padding:12px 8px 12px 14px; font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:#334155; font-weight:700; cursor:default; border-bottom:2px solid transparent; white-space:nowrap; user-select:none; }
+.tab-sep { width:1px; background:#2a2d3a; margin:8px 6px; flex-shrink:0; }
 </style>
 </head>
 <body>
 <div class="topbar">
   <h1>EnPro PO Agent <span>v3.0 — Customer Crosswalk</span></h1>
-  <div><span class="status-dot"></span> Online</div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <span id="modeBadge" class="mode-badge operator">Operator</span>
+    <button id="modeToggleBtn" class="btn btn-gray" style="padding:4px 12px;font-size:11px;" onclick="toggleAdminMode()">Admin View</button>
+    <span><span class="status-dot"></span> Online</span>
+  </div>
 </div>
 <div class="stats" id="statsRow">
   <div class="stat-card"><div class="label">Total Processed</div><div class="value" id="sTotal">-</div><div class="sub">all time</div></div>
@@ -98,15 +108,20 @@ tr:hover { background: #141620; }
   <div class="stat-card"><div class="label">Customers Mapped</div><div class="value" id="sCustXW">-</div><div class="sub">crosswalk entries</div></div>
   <div class="stat-card"><div class="label">Item Coverage</div><div class="value" id="sItemXW">-</div><div class="sub">customer-item pairs</div></div>
 </div>
-<div class="tabs">
+<div class="tabs" id="mainTabs">
+  <span class="tab-group-label">Operations</span>
   <button class="tab active" onclick="showTab('queue')">Review Queue <span class="badge" id="queueBadge">0</span></button>
   <button class="tab" onclick="showTab('processed')">Processed <span class="badge" id="procBadge">0</span></button>
-  <button class="tab" onclick="showTab('batch')">CISM Batch <span class="badge" id="batchBadge">0</span></button>
-  <button class="tab" onclick="showTab('crosswalk')">Crosswalk</button>
-  <button class="tab" onclick="showTab('cism')">CISM Schema</button>
-  <button class="tab" onclick="showTab('pipeline')">Pipeline</button>
+  <div class="tab-sep"></div>
+  <span class="tab-group-label">Exports</span>
   <button class="tab" onclick="showTab('payloads')">P21 Payloads <span class="badge" id="payloadsBadge">0</span></button>
   <button class="tab" onclick="showTab('outbound')">Outbound Sync <span class="badge" id="outboundBadge">0</span></button>
+  <div class="tab-sep admin-only"></div>
+  <span class="tab-group-label admin-only">Admin</span>
+  <button class="tab admin-only" onclick="showTab('batch')">CISM Batch <span class="badge" id="batchBadge">0</span></button>
+  <button class="tab admin-only" onclick="showTab('crosswalk')">Crosswalk</button>
+  <button class="tab admin-only" onclick="showTab('cism')">CISM Schema</button>
+  <button class="tab admin-only" onclick="showTab('pipeline')">Pipeline</button>
 </div>
 <div class="content">
 
@@ -1235,7 +1250,56 @@ async function viewOutboundPayload(outbound_id, po_no) {
   }
 }
 
-loadStats(); loadQueue('all');
+// ── View Mode ─────────────────────────────────────────────────────────────────
+// TODO: Set ADMIN_PASSPHRASE env var in Render dashboard to lock admin access.
+const ADMIN_PASSPHRASE_DEFAULT = 'enpro-admin';
+let _adminPassphrase = ADMIN_PASSPHRASE_DEFAULT;
+
+(async () => {
+  try {
+    const cfg = await fetch(`${API}/api/v1/ui/config`).then(r => r.json());
+    if (cfg && cfg.admin_passphrase) _adminPassphrase = cfg.admin_passphrase;
+  } catch(_) {}
+})();
+
+function applyMode(mode) {
+  const isAdmin = (mode === 'admin');
+  document.getElementById('modeBadge').textContent = isAdmin ? 'Admin' : 'Operator';
+  document.getElementById('modeBadge').className = `mode-badge ${mode}`;
+  document.getElementById('modeToggleBtn').textContent = isAdmin ? 'Exit Admin' : 'Admin View';
+  document.querySelectorAll('.admin-only').forEach(el => {
+    el.style.display = isAdmin ? '' : 'none';
+  });
+  if (!isAdmin) {
+    const active = document.querySelector('.tab-panel.active');
+    const adminPanels = ['panel-batch','panel-crosswalk','panel-cism','panel-pipeline'];
+    if (active && adminPanels.includes(active.id)) {
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('panel-queue').classList.add('active');
+      document.querySelector('.tab[onclick*="\'queue\'"]').classList.add('active');
+    }
+  }
+  localStorage.setItem('ui_mode', mode);
+}
+
+function toggleAdminMode() {
+  const current = localStorage.getItem('ui_mode') || 'operator';
+  if (current === 'admin') { applyMode('operator'); return; }
+  const input = prompt('Admin passphrase:');
+  if (input === null) return;
+  if (input === _adminPassphrase) {
+    applyMode('admin');
+  } else {
+    alert('Incorrect passphrase.');
+  }
+}
+
+function initMode() {
+  applyMode(localStorage.getItem('ui_mode') || 'operator');
+}
+
+initMode(); loadStats(); loadQueue('all');
 setInterval(loadStats, 30000);
 </script>
 </body>
