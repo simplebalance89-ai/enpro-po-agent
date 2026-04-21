@@ -801,6 +801,28 @@ async def download_p21_payload(intake_id: str):
     )
 
 
+def _run_po_validation(po: dict) -> dict:
+    """Single source of truth for P21 payload validation. Returns validation result dict."""
+    from datetime import datetime as _dt
+    errors = []
+    cm = po.get("customer_match", {})
+    h = po.get("header", {})
+    lines = po.get("lines", [])
+    cust_id = cm.get("p21_id", "") or h.get("customer_id_p21", "")
+    if not cust_id:
+        errors.append({"code": "MISSING_CUSTOMER_ID", "message": "No P21 customer ID — use Edit PO to map customer"})
+    if not any(ln.get("item_id_p21", "") for ln in lines):
+        errors.append({"code": "NO_VALID_LINE_ITEMS", "message": "No line items have a P21 item ID mapped"})
+    valid = not errors
+    return {
+        "valid": valid,
+        "status": "batch_ready" if valid else "needs_fix",
+        "errors": errors,
+        "warnings": [],
+        "updated_at": _dt.utcnow().isoformat(),
+    }
+
+
 class BatchPayloadRequest(BaseModel):
     intake_ids: list
     approved_only: bool = True
@@ -828,14 +850,9 @@ async def batch_payload_summary(req: BatchPayloadRequest):
             skipped.append({"intake_id": intake_id, "po_no": po_no, "reason": f"status is {po.get('review_status', 'unknown')}, not approved"})
             continue
 
-        cust_id = po.get("customer_match", {}).get("p21_id", "")
-        if not cust_id:
-            skipped.append({"intake_id": intake_id, "po_no": po_no, "reason": "no customer ID"})
-            continue
-
-        lines = po.get("lines", [])
-        if not any(ln.get("item_id_p21", "") for ln in lines):
-            skipped.append({"intake_id": intake_id, "po_no": po_no, "reason": "no valid line items"})
+        v = _run_po_validation(po)
+        if not v["valid"]:
+            skipped.append({"intake_id": intake_id, "po_no": po_no, "reason": "validation failed: " + ", ".join(e["code"] for e in v["errors"])})
             continue
 
         included.append(intake_id)
@@ -885,23 +902,14 @@ async def batch_payload_preflight(req: BatchPayloadRequest):
             })
             continue
 
-        cust_id = cm.get("p21_id", "")
-        if not cust_id:
+        v = _run_po_validation(po)
+        if not v["valid"]:
             skipped.append({
                 "intake_id": intake_id,
                 "po_no": po_no,
-                "reason_code": "MISSING_CUSTOMER_ID",
-                "reason_message": "No P21 customer ID — use Edit PO to map customer",
-            })
-            continue
-
-        lines = po.get("lines", [])
-        if not any(ln.get("item_id_p21", "") for ln in lines):
-            skipped.append({
-                "intake_id": intake_id,
-                "po_no": po_no,
-                "reason_code": "NO_VALID_LINE_ITEMS",
-                "reason_message": "No line items have a P21 item ID mapped",
+                "reason_code": "VALIDATION_FAILED",
+                "reason_message": "; ".join(e["message"] for e in v["errors"]),
+                "validation_errors": v["errors"],
             })
             continue
 
@@ -921,6 +929,25 @@ async def batch_payload_preflight(req: BatchPayloadRequest):
         "skipped_count": len(skipped),
         "included": included,
         "skipped": skipped,
+    }
+
+
+@app.post("/api/v1/p21/payload/validate/{intake_id}")
+async def validate_po_payload(intake_id: str):
+    """Validate a single PO's P21 payload readiness and persist the result."""
+    po = local_store.get_po(intake_id)
+    if not po:
+        raise HTTPException(status_code=404, detail=f"PO {intake_id} not found")
+    po_no = po.get("po_no") or po.get("header", {}).get("po_no", intake_id)
+    v = _run_po_validation(po)
+    local_store.update_po(intake_id, {"payload_validation": v})
+    return {
+        "intake_id": intake_id,
+        "po_no": po_no,
+        "valid": v["valid"],
+        "status": v["status"],
+        "errors": v["errors"],
+        "warnings": v["warnings"],
     }
 
 
@@ -948,16 +975,12 @@ async def batch_payload_download(req: BatchPayloadRequest):
             skipped.append({"intake_id": intake_id, "po_no": po_no, "reason": f"status is {po.get('review_status', 'unknown')}, not approved"})
             continue
 
-        cust_id = po.get("customer_match", {}).get("p21_id", "")
-        if not cust_id:
-            skipped.append({"intake_id": intake_id, "po_no": po_no, "reason": "no customer ID"})
+        v = _run_po_validation(po)
+        if not v["valid"]:
+            skipped.append({"intake_id": intake_id, "po_no": po_no, "reason": "validation failed: " + ", ".join(e["code"] for e in v["errors"])})
             continue
 
-        lines = po.get("lines", [])
-        if not any(ln.get("item_id_p21", "") for ln in lines):
-            skipped.append({"intake_id": intake_id, "po_no": po_no, "reason": "no valid line items"})
-            continue
-
+        cust_id = po.get("customer_match", {}).get("p21_id", "") or po.get("header", {}).get("customer_id_p21", "")
         try:
             engine = _get_customer_engine()
             po["customer_defaults"] = engine.get_customer_defaults(cust_id)
@@ -1011,6 +1034,7 @@ async def list_p21_payloads():
             "lines_count": po.get("lines_count", len(po.get("lines", []))),
             "customer_name": po.get("customer_match", {}).get("name", ""),
             "customer_id": po.get("customer_match", {}).get("p21_id", ""),
+            "payload_validation": po.get("payload_validation", {}),
         })
     return results
 
@@ -1080,6 +1104,11 @@ async def approve_po(intake_id: str, req: ApproveRequest, _auth=Depends(_require
         "reviewer_notes": req.notes,
         "reviewed_at": datetime.utcnow().isoformat(),
     })
+
+    # Auto-validate payload readiness on approval
+    _approved = local_store.get_po(intake_id)
+    if _approved:
+        local_store.update_po(intake_id, {"payload_validation": _run_po_validation(_approved)})
 
     # Learning loop
     cust = po.get("customer_match", {})
@@ -1255,6 +1284,11 @@ async def edit_po(intake_id: str, req: EditPORequest, _auth=Depends(_require_api
         updates["review_status"] = "approved"
 
     local_store.update_po(intake_id, updates)
+
+    # Auto-validate payload readiness after edit
+    _updated = local_store.get_po(intake_id)
+    if _updated:
+        local_store.update_po(intake_id, {"payload_validation": _run_po_validation(_updated)})
 
     return {
         "status": "edited",
