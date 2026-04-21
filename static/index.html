@@ -138,6 +138,16 @@ tr:hover { background: #141620; }
           <tr><td><span class="score-pill lo">UNMAPPED</span></td><td style="padding-left:12px;">0% — No match found at all. New part number not in the crosswalk. Must be manually mapped or rejected.</td></tr>
         </table>
       </div>
+      <div style="background:#141620;border-radius:8px;padding:16px;margin-top:16px;">
+        <h3 style="font-size:14px;margin-bottom:10px;">Exporting a P21 Payload JSON</h3>
+        <ul style="font-size:13px;color:#cbd5e1;line-height:1.8;padding-left:18px;margin:0;">
+          <li>Select any PO from the queue, then click <strong style="color:#e0e0e0;">Download P21 Payload</strong> in the action bar.</li>
+          <li>The file downloaded is <code style="background:#0f1117;padding:1px 5px;border-radius:3px;">p21_payload_&lt;po_no&gt;_&lt;intake_id&gt;.json</code>.</li>
+          <li>For already-approved POs, click <strong style="color:#e0e0e0;">P21 JSON</strong> in the Download column of the Processed tab.</li>
+          <li>This export is <em>payload only</em> — it does <strong>not</strong> submit to P21.</li>
+          <li>Green-confidence POs produce complete payloads. Red POs with unmapped fields will have empty <code style="background:#0f1117;padding:1px 5px;border-radius:3px;">customer_id</code> or item IDs — use Edit PO to resolve first.</li>
+        </ul>
+      </div>
     </div>
   </div>
 </div>
