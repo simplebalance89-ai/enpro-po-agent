@@ -26,7 +26,7 @@ a { color: #60a5fa; text-decoration: none; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 .queue-layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; }
-.queue-sidebar { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; max-height: 600px; overflow-y: auto; }
+.queue-sidebar { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; max-height: calc(100vh - 220px); overflow-y: auto; }
 .queue-header { padding: 12px 16px; border-bottom: 1px solid #2a2d3a; display: flex; justify-content: space-between; align-items: center; }
 .queue-header h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; }
 .filter-pills { display: flex; gap: 4px; }
@@ -39,7 +39,7 @@ a { color: #60a5fa; text-decoration: none; }
 .po-meta { font-size: 12px; color: #475569; margin-top: 3px; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 .dot.green { background: #4ade80; } .dot.yellow { background: #fbbf24; } .dot.red { background: #f87171; }
-.detail-panel { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; padding: 24px; }
+.detail-panel { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; overflow-y: auto; max-height: calc(100vh - 220px); }
 .detail-panel h2 { font-size: 20px; margin-bottom: 16px; }
 .badge-conf { display: inline-block; padding: 3px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; margin-left: 8px; }
 .badge-conf.green { background: #0d3320; color: #4ade80; }
@@ -90,6 +90,20 @@ tr:hover { background: #141620; }
 .mode-badge.admin    { background:#2d1b00; color:#fbbf24; border:1px solid #78350f; }
 .tab-group-label { padding:12px 8px 12px 14px; font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:#334155; font-weight:700; cursor:default; border-bottom:2px solid transparent; white-space:nowrap; user-select:none; }
 .tab-sep { width:1px; background:#2a2d3a; margin:8px 6px; flex-shrink:0; }
+/* UX refinement */
+.queue-subtitle { font-size:11px; color:#475569; margin-top:3px; font-weight:400; text-transform:none; letter-spacing:0; }
+.swim-lane-header { display:flex; justify-content:space-between; align-items:center; padding:7px 16px; font-size:10px; text-transform:uppercase; letter-spacing:1px; font-weight:700; border-top:1px solid #2a2d3a; border-bottom:1px solid #2a2d3a; position:sticky; top:0; z-index:2; }
+.swim-lane-header.needs-review { background:#1c1015; color:#fb923c; }
+.swim-lane-header.ready-to-approve { background:#0b1a10; color:#4ade80; }
+.swim-count { background:#334155; color:#94a3b8; padding:1px 7px; border-radius:8px; font-size:10px; font-weight:600; }
+.sticky-action-bar { position:sticky; top:0; z-index:10; background:#1e2130; border-bottom:1px solid #2a2d3a; padding:10px 20px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; border-radius:8px 8px 0 0; }
+.detail-content { padding:20px 24px 24px; }
+.help-section { background:#141620; border-radius:8px; margin-top:10px; border:1px solid #1e2030; }
+.help-toggle { cursor:pointer; display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:#94a3b8; padding:12px 16px; user-select:none; list-style:none; }
+.help-toggle::-webkit-details-marker { display:none; }
+.help-toggle .arrow { font-size:10px; color:#475569; transition:transform .15s; display:inline-block; }
+details.help-section[open] > summary .arrow { transform:rotate(90deg); }
+.help-body { padding:0 16px 14px; }
 </style>
 </head>
 <body>
@@ -130,7 +144,7 @@ tr:hover { background: #141620; }
   <div class="queue-layout">
     <div class="queue-sidebar">
       <div class="queue-header">
-        <h3>Exception Queue</h3>
+        <h3>Needs Action</h3><div class="queue-subtitle">Select a PO to review and take action</div>
         <div class="filter-pills">
           <button class="pill active" onclick="filterQ('all')">All</button>
           <button class="pill" onclick="filterQ('green')">Green</button>
@@ -150,26 +164,32 @@ tr:hover { background: #141620; }
       </div>
     </div>
     <div class="detail-panel" id="detailPanel">
-      <div class="empty">Select a PO from the queue to review</div>
-      <div style="background:#141620;border-radius:8px;padding:16px;margin-top:16px;">
-        <h3 style="font-size:14px;margin-bottom:12px;">Match Scoring Guide</h3>
-        <table style="font-size:13px;">
-          <tr><td><span class="score-pill hi">EXACT</span></td><td style="padding-left:12px;">100% — This customer has ordered this exact part before. Customer-specific match from SO history.</td></tr>
-          <tr><td><span class="score-pill hi">MATCHED</span></td><td style="padding-left:12px;">90% — Part exists in P21 and has been ordered by other customers. Confident match but not customer-specific.</td></tr>
-          <tr><td><span class="score-pill mid">FUZZY — verify</span></td><td style="padding-left:12px;">60-89% — Description or partial match found. The system is guessing — Brittany should verify or use Edit PO to pick the right item.</td></tr>
-          <tr><td><span class="score-pill lo">GUESS — review</span></td><td style="padding-left:12px;">1-59% — Very low confidence guess. Almost certainly needs manual remapping via Edit PO.</td></tr>
-          <tr><td><span class="score-pill lo">UNMAPPED</span></td><td style="padding-left:12px;">0% — No match found at all. New part number not in the crosswalk. Must be manually mapped or rejected.</td></tr>
-        </table>
-      </div>
-      <div style="background:#141620;border-radius:8px;padding:16px;margin-top:16px;">
-        <h3 style="font-size:14px;margin-bottom:10px;">Exporting a P21 Payload JSON</h3>
-        <ul style="font-size:13px;color:#cbd5e1;line-height:1.8;padding-left:18px;margin:0;">
-          <li>Select any PO from the queue, then click <strong style="color:#e0e0e0;">Download P21 Payload</strong> in the action bar.</li>
-          <li>The file downloaded is <code style="background:#0f1117;padding:1px 5px;border-radius:3px;">p21_payload_&lt;po_no&gt;_&lt;intake_id&gt;.json</code>.</li>
-          <li>For already-approved POs, click <strong style="color:#e0e0e0;">P21 JSON</strong> in the Download column of the Processed tab.</li>
-          <li>This export is <em>payload only</em> — it does <strong>not</strong> submit to P21.</li>
-          <li>Green-confidence POs produce complete payloads. Red POs with unmapped fields will have empty <code style="background:#0f1117;padding:1px 5px;border-radius:3px;">customer_id</code> or item IDs — use Edit PO to resolve first.</li>
-        </ul>
+      <div class="detail-content">
+        <div class="empty">Select a PO from the queue to review</div>
+        <details class="help-section">
+          <summary class="help-toggle"><span class="arrow">▶</span>&nbsp;How scoring works</summary>
+          <div class="help-body">
+            <table style="font-size:13px;">
+              <tr><td><span class="score-pill hi">EXACT</span></td><td style="padding-left:12px;">100% — This customer has ordered this exact part before. Customer-specific match from SO history.</td></tr>
+              <tr><td><span class="score-pill hi">MATCHED</span></td><td style="padding-left:12px;">90% — Part exists in P21 and has been ordered by other customers. Confident match but not customer-specific.</td></tr>
+              <tr><td><span class="score-pill mid">FUZZY — verify</span></td><td style="padding-left:12px;">60-89% — Description or partial match found. The system is guessing — Brittany should verify or use Edit PO to pick the right item.</td></tr>
+              <tr><td><span class="score-pill lo">GUESS — review</span></td><td style="padding-left:12px;">1-59% — Very low confidence guess. Almost certainly needs manual remapping via Edit PO.</td></tr>
+              <tr><td><span class="score-pill lo">UNMAPPED</span></td><td style="padding-left:12px;">0% — No match found at all. New part number not in the crosswalk. Must be manually mapped or rejected.</td></tr>
+            </table>
+          </div>
+        </details>
+        <details class="help-section">
+          <summary class="help-toggle"><span class="arrow">▶</span>&nbsp;How payload export works</summary>
+          <div class="help-body">
+            <ul style="font-size:13px;color:#cbd5e1;line-height:1.8;padding-left:18px;margin:0;">
+              <li>Select any PO from the queue, then click <strong style="color:#e0e0e0;">Download P21 Payload</strong> in the sticky action bar.</li>
+              <li>The file downloaded is <code style="background:#0f1117;padding:1px 5px;border-radius:3px;">p21_payload_&lt;po_no&gt;_&lt;intake_id&gt;.json</code>.</li>
+              <li>For already-approved POs, click <strong style="color:#e0e0e0;">P21 JSON</strong> in the Download column of the Processed tab.</li>
+              <li>This export is <em>payload only</em> — it does <strong>not</strong> submit to P21.</li>
+              <li>Green-confidence POs produce complete payloads. Red POs with unmapped fields will have empty <code style="background:#0f1117;padding:1px 5px;border-radius:3px;">customer_id</code> or item IDs — use Edit PO to resolve first.</li>
+            </ul>
+          </div>
+        </details>
       </div>
     </div>
   </div>
@@ -454,16 +474,54 @@ async function loadQueue(filter) {
   } catch(e) { document.getElementById('poList').innerHTML = '<div class="empty" style="padding:20px;">Error loading</div>'; }
 }
 
+function isReadyToApprove(po) {
+  if (po.confidence !== 'green') return false;
+  const h = po.header || {};
+  if (!h.customer_id_p21) return false;
+  const lines = po.lines || [];
+  if (!lines.length) return false;
+  return lines.every(l => l.item_id_p21 && String(l.item_id_p21).trim() !== '');
+}
+
+function getMissingReason(po) {
+  const h = po.header || {};
+  if (!h.customer_id_p21) return 'Missing customer mapping';
+  const lines = po.lines || [];
+  if (!lines.length) return 'No line items';
+  const unmapped = lines.filter(l => !l.item_id_p21 || String(l.item_id_p21).trim() === '');
+  if (unmapped.length) return `${unmapped.length} unmapped item${unmapped.length > 1 ? 's' : ''}`;
+  if (po.confidence !== 'green') return `Confidence too low (${po.confidence})`;
+  return null;
+}
+
+function renderPoRow(po) {
+  const srcBg = po.source==='ariba'?'#1e3a5f':po.source==='coupa'?'#2d1b69':'#334155';
+  const confColor = po.confidence==='red'?'#f87171':po.confidence==='yellow'?'#fbbf24':'#4ade80';
+  return `<div class="po-item ${selectedId === po.intake_id ? 'selected' : ''}"
+       onclick="selectPO('${po.intake_id}')" tabindex="0"
+       onkeydown="if(event.key==='Enter')selectPO('${po.intake_id}')">
+    <div><span class="dot ${po.confidence}"></span><span class="po-num">${po.po_number || 'Unknown'}</span></div>
+    <div class="po-meta"><span style="text-transform:uppercase;font-size:10px;background:${srcBg};padding:1px 6px;border-radius:3px;margin-right:4px;">${po.source||'?'}</span>${po.customer_p21 || po.ship_to || 'Unknown customer'}</div>
+    <div style="font-size:11px;color:${confColor};margin-top:2px;">${po.reason || ''}</div>
+  </div>`;
+}
+
 function renderQueue() {
   const el = document.getElementById('poList');
-  if (!queue.length) { el.innerHTML = '<div class="empty" style="padding:30px;">No POs pending review. Pipeline is fully automated.</div>'; return; }
-  el.innerHTML = queue.map(po => `
-    <div class="po-item ${selectedId === po.intake_id ? 'selected' : ''}" onclick="selectPO('${po.intake_id}')">
-      <div><span class="dot ${po.confidence}"></span><span class="po-num">${po.po_number || 'Unknown'}</span></div>
-      <div class="po-meta"><span style="text-transform:uppercase;font-size:10px;background:${po.source==='ariba'?'#1e3a5f':po.source==='coupa'?'#2d1b69':'#334155'};padding:1px 6px;border-radius:3px;margin-right:4px;">${po.source||'?'}</span>${po.customer_p21 || po.ship_to || 'Unknown customer'}</div>
-      <div style="font-size:11px;color:${po.confidence==='red'?'#f87171':po.confidence==='yellow'?'#fbbf24':'#4ade80'};margin-top:2px;">${po.reason || ''}</div>
-    </div>
-  `).join('');
+  if (!queue.length) {
+    el.innerHTML = '<div class="empty" style="padding:30px;">No POs pending review. Pipeline is fully automated.</div>';
+    return;
+  }
+  const filtered = currentFilter === 'all' ? queue : queue.filter(po => po.confidence === currentFilter);
+  const needsReview = filtered.filter(po => !isReadyToApprove(po));
+  const readyToApprove = filtered.filter(po => isReadyToApprove(po));
+  const nrRows = needsReview.length ? needsReview.map(renderPoRow).join('') : '<div style="padding:10px 16px;font-size:12px;color:#334155;font-style:italic;">None in this filter</div>';
+  const raRows = readyToApprove.length ? readyToApprove.map(renderPoRow).join('') : '<div style="padding:10px 16px;font-size:12px;color:#334155;font-style:italic;">None in this filter</div>';
+  el.innerHTML =
+    `<div class="swim-lane-header needs-review"><span>Needs Review</span><span class="swim-count">${needsReview.length}</span></div>` +
+    nrRows +
+    `<div class="swim-lane-header ready-to-approve"><span>Ready to Approve</span><span class="swim-count">${readyToApprove.length}</span></div>` +
+    raRows;
 }
 
 function selectPO(id) {
@@ -473,39 +531,57 @@ function selectPO(id) {
   if (!po) return;
   const h = po.header || {};
   const lines = po.lines || [];
-  const cm = po.customer_match || {};
 
-  document.getElementById('detailPanel').innerHTML = `
-    <h2>PO ${po.po_number || '?'} <span class="badge-conf ${po.confidence}">${(po.confidence||'').toUpperCase()}</span></h2>
-    <div style="color:#94a3b8; font-size:13px; margin-bottom:12px;">${po.reason || ''}</div>
-    <div class="meta-grid">
-      <div class="meta-box"><div class="lbl">Customer (Ship-To)</div><div class="val">${h.ship2_name || po.ship_to || '-'}</div></div>
-      <div class="meta-box"><div class="lbl">P21 Customer</div><div class="val ${h.customer_id_p21 ? '' : 'warn'}">${h.customer_name_p21 || 'NOT MATCHED'} ${h.customer_id_p21 ? '('+h.customer_id_p21+')' : ''}</div></div>
-      <div class="meta-box"><div class="lbl">Match</div><div class="val">${h.customer_match_method || '-'} (${(h.customer_match_score||0).toFixed?.(2) || '0'})</div></div>
-      <div class="meta-box"><div class="lbl">Address</div><div class="val">${h.ship2_add1 || ''}, ${h.ship2_city || ''} ${h.ship2_state || ''} ${h.ship2_zip || ''}</div></div>
-      <div class="meta-box"><div class="lbl">Source</div><div class="val">${po.source || '-'}</div></div>
-      <div class="meta-box"><div class="lbl">Received</div><div class="val">${po.received ? new Date(po.received).toLocaleString() : '-'}</div></div>
-    </div>
-    <h3 style="margin:16px 0 8px;">Line Items (${lines.length})</h3>
-    <table>
-      <tr><th>#</th><th>Customer Part #</th><th>Description</th><th>Qty</th><th>Price</th><th>P21 Item</th><th>Match</th></tr>
-      ${lines.map((l,i) => `<tr>
-        <td>${l.line_no || i+1}</td>
-        <td>${l.supplier_part_id || '-'}</td>
-        <td>${(l.item_description||'').substring(0,40)}</td>
-        <td>${l.qty_ordered || 0}</td>
-        <td>$${(l.unit_price||0).toFixed?.(2) || '0.00'}</td>
-        <td>${l.item_id_p21 || '<span style="color:#f87171">UNMAPPED</span>'}</td>
-        <td>${matchLabel(l.crosswalk_match_score)}</td>
-      </tr>`).join('')}
-    </table>
-    <div class="action-bar">
-      <button class="btn btn-green" onclick="approvePO('${po.intake_id}')">Approve & Create SO</button>
-      <button class="btn btn-blue" onclick="editPO('${po.intake_id}')">Edit PO</button>
-      <a class="btn btn-gray" href="${API}/api/v1/p21/payload/${po.intake_id}/download" download>Download P21 Payload</a>
-      <button class="btn btn-red" onclick="rejectPO('${po.intake_id}')">Reject</button>
-    </div>
-  `;
+  const panel = document.getElementById('detailPanel');
+  panel.scrollTop = 0;
+
+  const eligible = isReadyToApprove(po);
+  const missingReason = getMissingReason(po);
+  const approveDisabled = !eligible ? `disabled style="opacity:0.4;cursor:not-allowed;" title="${missingReason}"` : '';
+
+  panel.innerHTML =
+    `<div class="sticky-action-bar">` +
+      `<div class="po-summary-quick">` +
+        `<span style="font-weight:700;font-size:14px;color:#fff;">PO ${po.po_number || '?'}</span>` +
+        `<span class="badge-conf ${po.confidence}">${(po.confidence||'').toUpperCase()}</span>` +
+        `<span style="color:#64748b;font-size:12px;">${po.source||''}</span>` +
+        `<span style="color:#475569;font-size:12px;">· ${lines.length} lines</span>` +
+        (h.customer_name_p21 ? `<span style="color:#94a3b8;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">· ${h.customer_name_p21}</span>` : `<span style="color:#f87171;font-size:12px;">· customer unmapped</span>`) +
+      `</div>` +
+      `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">` +
+        `<button class="btn btn-blue" onclick="editPO('${po.intake_id}')" style="padding:6px 14px;">Edit PO</button>` +
+        `<button class="btn btn-green" ${approveDisabled} onclick="${eligible ? `approvePO('${po.intake_id}')` : ''}" style="padding:6px 14px;">Approve</button>` +
+        `<button class="btn btn-red" onclick="rejectPO('${po.intake_id}')" style="padding:6px 14px;">Reject</button>` +
+        `<a class="btn btn-gray" href="${API}/api/v1/p21/payload/${po.intake_id}/download" download style="padding:6px 14px;text-decoration:none;">Download P21 Payload</a>` +
+        (missingReason && !eligible ? `<span style="color:#f87171;font-size:11px;">⚠ ${missingReason}</span>` : '') +
+      `</div>` +
+    `</div>` +
+    `<div class="detail-content">` +
+      `<div style="color:#94a3b8; font-size:13px; margin-bottom:12px;">${po.reason || ''}</div>` +
+      `<div class="meta-grid">` +
+        `<div class="meta-box"><div class="lbl">Customer (Ship-To)</div><div class="val">${h.ship2_name || po.ship_to || '-'}</div></div>` +
+        `<div class="meta-box"><div class="lbl">P21 Customer</div><div class="val ${h.customer_id_p21 ? '' : 'warn'}">${h.customer_name_p21 || 'NOT MATCHED'} ${h.customer_id_p21 ? '('+h.customer_id_p21+')' : ''}</div></div>` +
+        `<div class="meta-box"><div class="lbl">Match</div><div class="val">${h.customer_match_method || '-'} (${(h.customer_match_score||0).toFixed?.(2) || '0'})</div></div>` +
+        `<div class="meta-box"><div class="lbl">Address</div><div class="val">${h.ship2_add1 || ''}, ${h.ship2_city || ''} ${h.ship2_state || ''} ${h.ship2_zip || ''}</div></div>` +
+        `<div class="meta-box"><div class="lbl">Source</div><div class="val">${po.source || '-'}</div></div>` +
+        `<div class="meta-box"><div class="lbl">Received</div><div class="val">${po.received ? new Date(po.received).toLocaleString() : '-'}</div></div>` +
+      `</div>` +
+      `<h3 style="margin:16px 0 8px;">Line Items (${lines.length})</h3>` +
+      `<table>` +
+        `<tr><th>#</th><th>Customer Part #</th><th>Description</th><th>Qty</th><th>Price</th><th>P21 Item</th><th>Match</th></tr>` +
+        lines.map((l,i) =>
+          `<tr>` +
+            `<td>${l.line_no || i+1}</td>` +
+            `<td>${l.supplier_part_id || '-'}</td>` +
+            `<td>${(l.item_description||'').substring(0,40)}</td>` +
+            `<td>${l.qty_ordered || 0}</td>` +
+            `<td>$${(l.unit_price||0).toFixed?.(2) || '0.00'}</td>` +
+            `<td>${l.item_id_p21 || '<span style="color:#f87171">UNMAPPED</span>'}</td>` +
+            `<td>${matchLabel(l.crosswalk_match_score)}</td>` +
+          `</tr>`
+        ).join('') +
+      `</table>` +
+    `</div>`;
 }
 
 function matchLabel(score) {
