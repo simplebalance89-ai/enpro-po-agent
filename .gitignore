@@ -7,3 +7,5 @@ __pycache__/
 po_store/
 *.log
 .DS_Store
+artifacts/
+scripts/build_batch_payloads.py
