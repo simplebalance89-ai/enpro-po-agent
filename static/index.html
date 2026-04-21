@@ -99,6 +99,7 @@ tr:hover { background: #141620; }
   <button class="tab" onclick="showTab('crosswalk')">Crosswalk</button>
   <button class="tab" onclick="showTab('cism')">CISM Schema</button>
   <button class="tab" onclick="showTab('pipeline')">Pipeline</button>
+  <button class="tab" onclick="showTab('payloads')">P21 Payloads <span class="badge" id="payloadsBadge">0</span></button>
 </div>
 <div class="content">
 
@@ -325,6 +326,40 @@ tr:hover { background: #141620; }
     <b>Items:</b> "Customer 208672 calls part PH0260 = P21 inv_mast_uid 7931" — remembered per customer.<br>
     <b>PO Link:</b> "PO# 4500867075 = customer 208672" — catches duplicates, confirms identity.<br>
     <span style="color:#64748b;">Day 1: mostly yellow/red (learning). Month 1: mostly green (automated).</span></div></div></div>
+</div>
+
+<!-- P21 PAYLOADS -->
+<div class="tab-panel" id="panel-payloads">
+  <div class="xw-section">
+    <h3>P21 Transaction API Payloads</h3>
+    <p class="desc">All ingested POs. Click <strong>View JSON</strong> to inspect the payload, <strong>Download</strong> to save the file.</p>
+    <div id="payloadsEmpty" class="empty" style="display:none;">No POs found.</div>
+    <div class="scroll-table">
+      <table id="payloadsTable" style="display:none;">
+        <thead><tr>
+          <th>PO No</th><th>Intake ID</th><th>Customer</th><th>Lines</th><th>Confidence</th><th>Status</th><th>Created</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="payloadsTbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- JSON VIEWER MODAL -->
+<div id="jsonModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;overflow:auto;padding:24px;">
+  <div style="background:#1a1d27;border:1px solid #2a2d3a;border-radius:10px;max-width:900px;margin:0 auto;padding:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div>
+        <span style="font-weight:700;font-size:15px;color:#fff;" id="modalTitle">P21 Payload</span>
+        <span style="font-size:12px;color:#64748b;margin-left:12px;" id="modalFilename"></span>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <a id="modalDownloadLink" class="btn btn-gray" style="font-size:12px;padding:6px 14px;text-decoration:none;" download>Download</a>
+        <button class="btn btn-gray" style="font-size:12px;padding:6px 14px;" onclick="closeModal()">Close</button>
+      </div>
+    </div>
+    <pre id="jsonViewer" style="background:#0f1117;border:1px solid #2a2d3a;border-radius:6px;padding:16px;font-size:12px;line-height:1.6;overflow-x:auto;color:#a5f3fc;white-space:pre-wrap;word-break:break-word;max-height:60vh;overflow-y:auto;"></pre>
+  </div>
 </div>
 
 </div>
@@ -897,7 +932,63 @@ function showTab(name) {
   if (name === 'cism') loadCismSchema();
   if (name === 'processed') loadProcessed();
   if (name === 'batch') loadBatch();
+  if (name === 'payloads') loadPayloads();
 }
+
+async function loadPayloads() {
+  try {
+    const data = await (await fetch(`${API}/api/v1/p21/payloads`)).json();
+    const tbody = document.getElementById('payloadsTbody');
+    const tbl = document.getElementById('payloadsTable');
+    const empty = document.getElementById('payloadsEmpty');
+    document.getElementById('payloadsBadge').textContent = data.length;
+    if (!data.length) { empty.style.display='block'; tbl.style.display='none'; return; }
+    empty.style.display='none'; tbl.style.display='table';
+    tbody.innerHTML = data.map(r => `<tr>
+      <td style="font-weight:600;color:#fff;">${r.po_no||'-'}</td>
+      <td style="font-family:monospace;font-size:11px;color:#64748b;">${r.intake_id}</td>
+      <td>${r.customer_name||'-'} ${r.customer_id ? '<span style="color:#64748b;font-size:11px;">('+r.customer_id+')</span>' : ''}</td>
+      <td style="text-align:center;">${r.lines_count||0}</td>
+      <td><span class="badge-conf ${r.confidence}">${(r.confidence||'').toUpperCase()}</span></td>
+      <td style="color:${r.review_status==='approved'?'#4ade80':r.review_status==='rejected'?'#f87171':'#fbbf24'};font-weight:600;font-size:12px;">${(r.review_status||'pending').toUpperCase()}</td>
+      <td style="font-size:11px;color:#64748b;">${r.created_at?r.created_at.substring(0,16).replace('T',' '):'-'}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-blue" style="padding:4px 10px;font-size:11px;" onclick="viewPayload('${r.intake_id}','${r.po_no}','${r.filename}')">View JSON</button>
+        <a class="btn btn-gray" style="padding:4px 10px;font-size:11px;text-decoration:none;" href="${API}/api/v1/p21/payload/${r.intake_id}/download" download="${r.filename}">Download</a>
+      </td>
+    </tr>`).join('');
+  } catch(e) { console.error('loadPayloads error:', e); }
+}
+
+async function viewPayload(intakeId, poNo, filename) {
+  const modal = document.getElementById('jsonModal');
+  const viewer = document.getElementById('jsonViewer');
+  const title = document.getElementById('modalTitle');
+  const fnEl = document.getElementById('modalFilename');
+  const dlLink = document.getElementById('modalDownloadLink');
+  viewer.textContent = 'Loading…';
+  modal.style.display = 'block';
+  document.body.style.overflow = 'hidden';
+  title.textContent = `PO ${poNo}`;
+  fnEl.textContent = filename;
+  dlLink.href = `${API}/api/v1/p21/payload/${intakeId}/download`;
+  dlLink.download = filename;
+  try {
+    const resp = await fetch(`${API}/api/v1/p21/payload/${intakeId}/download`);
+    const json = await resp.json();
+    viewer.textContent = JSON.stringify(json, null, 2);
+  } catch(e) {
+    viewer.textContent = `Error loading payload: ${e.message}`;
+  }
+}
+
+function closeModal() {
+  document.getElementById('jsonModal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+document.getElementById('jsonModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
 
 loadStats(); loadQueue('all');
 setInterval(loadStats, 30000);

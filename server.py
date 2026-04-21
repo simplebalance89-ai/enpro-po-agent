@@ -755,6 +755,30 @@ async def download_p21_payload(intake_id: str):
     )
 
 
+@app.get("/api/v1/p21/payloads")
+async def list_p21_payloads():
+    """List all POs that have a downloadable P21 payload, with metadata."""
+    all_pos = local_store.list_pos()
+    results = []
+    for po in all_pos:
+        intake_id = po.get("intake_id") or po.get("_intake_id", "")
+        po_no = po.get("po_no") or po.get("header", {}).get("po_no", "")
+        if not intake_id:
+            continue
+        results.append({
+            "intake_id": intake_id,
+            "po_no": po_no,
+            "filename": f"p21_payload_{po_no}_{intake_id}.json",
+            "created_at": po.get("_stored_at", ""),
+            "confidence": po.get("confidence", ""),
+            "review_status": po.get("review_status", "pending"),
+            "lines_count": po.get("lines_count", len(po.get("lines", []))),
+            "customer_name": po.get("customer_match", {}).get("name", ""),
+            "customer_id": po.get("customer_match", {}).get("p21_id", ""),
+        })
+    return results
+
+
 @app.post("/api/v1/p21/payload/from-file")
 async def generate_p21_payload_from_file(file: UploadFile = File(...)):
     """Upload a cXML/PDF PO file, parse it, run crosswalk, and return the P21 API payload.
