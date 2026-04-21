@@ -29,7 +29,7 @@ from typing import Optional
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -66,6 +66,14 @@ from services.processing import local_store
 from services.processing.cism_batch import add_to_batch, get_batch_status, clear_batch
 
 settings = get_settings()
+
+_APP_API_KEY = os.environ.get("APP_API_KEY", "")
+
+
+async def _require_api_key(x_api_key: Optional[str] = Header(default=None)):
+    if _APP_API_KEY and x_api_key != _APP_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
+
 
 logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
@@ -203,10 +211,16 @@ async def intake_upload(
     filename = file.filename or ""
 
     if filename.lower().endswith(".xml"):
-        header, lines, raw = po_parser.parse_cxml(content.decode("utf-8"))
+        try:
+            header, lines, raw = po_parser.parse_cxml(content.decode("utf-8"))
+        except Exception as e:
+            raise HTTPException(422, f"cXML parse error: {e}")
         fmt = "cxml"
     elif filename.lower().endswith(".csv"):
-        header, lines, raw = _parse_csv_po(content.decode("utf-8-sig"))
+        try:
+            header, lines, raw = _parse_csv_po(content.decode("utf-8-sig"))
+        except Exception as e:
+            raise HTTPException(422, f"CSV parse error: {e}")
         fmt = "csv"
     elif filename.lower().endswith(".pdf"):
         import tempfile
@@ -397,6 +411,36 @@ async def _process_po_to_so(header, lines, raw_content, source, fmt) -> dict:
         logger.info(f"Duplicate PO: {header.po_no} from {source}")
         return {"status": "duplicate", "po_no": header.po_no}
 
+    if not lines:
+        logger.warning(f"Zero-line PO rejected intake_id={intake_id} po_no={header.po_no}")
+        result_data = {
+            "status": "processed",
+            "po_no": header.po_no,
+            "intake_id": intake_id,
+            "source": source,
+            "confidence": "red",
+            "review_required": True,
+            "review_status": "pending",
+            "reason": "No line items parsed from PO",
+            "customer_match": {},
+            "duplicate": {"is_duplicate": False, "existing_order": None},
+            "lines_count": 0,
+            "item_scores": [],
+            "cism": None,
+            "received_at": datetime.utcnow().isoformat(),
+            "header": {"po_no": header.po_no, "ship2_name": header.ship2_name},
+            "lines": [],
+        }
+        local_store.save_po(intake_id, result_data)
+        return {
+            "status": "processed",
+            "po_no": header.po_no,
+            "intake_id": intake_id,
+            "confidence": "red",
+            "review_required": True,
+            "reason": "No line items parsed from PO",
+        }
+
     # 1. Customer matching
     cust_match = engine.match_customer(
         ship2_name=header.ship2_name,
@@ -526,8 +570,8 @@ async def _process_po_to_so(header, lines, raw_content, source, fmt) -> dict:
 
     try:
         log_intake(payload)
-    except Exception:
-        pass  # SQL not available on Render
+    except Exception as _log_exc:
+        logger.warning(f"log_intake failed (non-fatal) intake_id={intake_id} po_no={header.po_no}: {_log_exc}")
 
     # Save to local file store (always works)
     result_data = {
@@ -830,7 +874,7 @@ class ApproveRequest(BaseModel):
     notes: str = ""
 
 @app.post("/api/v1/review/po/{intake_id}/approve")
-async def approve_po(intake_id: str, req: ApproveRequest):
+async def approve_po(intake_id: str, req: ApproveRequest, _auth=Depends(_require_api_key)):
     """Approve a PO — triggers learning loop and submits to P21 (API or CISM fallback)."""
     po = local_store.get_po(intake_id)
     if not po:
@@ -914,7 +958,7 @@ class RejectRequest(BaseModel):
     reason: str = ""
 
 @app.post("/api/v1/review/po/{intake_id}/reject")
-async def reject_po(intake_id: str, req: RejectRequest):
+async def reject_po(intake_id: str, req: RejectRequest, _auth=Depends(_require_api_key)):
     """Reject a PO with reason."""
     po = local_store.get_po(intake_id)
     if not po:
@@ -950,7 +994,7 @@ class EditPORequest(BaseModel):
     notes: Optional[str] = None
 
 @app.post("/api/v1/review/po/{intake_id}/edit")
-async def edit_po(intake_id: str, req: EditPORequest):
+async def edit_po(intake_id: str, req: EditPORequest, _auth=Depends(_require_api_key)):
     """Edit a PO — update customer mapping, line items, ship-to, etc."""
     po = local_store.get_po(intake_id)
     if not po:
@@ -1053,7 +1097,7 @@ async def download_batch(file_type: str):
 
 
 @app.post("/api/v1/cism/batch/clear")
-async def clear_cism_batch():
+async def clear_cism_batch(_auth=Depends(_require_api_key)):
     """Clear the batch after uploading to Azure. Archives the files."""
     return clear_batch()
 
@@ -1176,7 +1220,7 @@ class VendorMappingRequest(BaseModel):
     p21_vendor_name: str
 
 @app.post("/api/v1/review/crosswalk/vendor")
-async def add_vendor_mapping(req: VendorMappingRequest):
+async def add_vendor_mapping(req: VendorMappingRequest, _auth=Depends(_require_api_key)):
     """Add or update a vendor crosswalk mapping from review portal."""
     save_vendor_mapping(
         req.source, req.source_vendor_id, req.source_vendor_name,
@@ -1194,7 +1238,7 @@ class ItemMappingRequest(BaseModel):
     p21_vendor_id: Optional[str] = None
 
 @app.post("/api/v1/review/crosswalk/item")
-async def add_item_mapping(req: ItemMappingRequest):
+async def add_item_mapping(req: ItemMappingRequest, _auth=Depends(_require_api_key)):
     """Add or update an item crosswalk mapping from review portal."""
     save_item_mapping(
         req.source, req.source_item_id, req.source_item_desc,
@@ -1313,6 +1357,7 @@ P21_DATA_DIR = "/app/data/p21_data"
 async def upload_p21_csv(
     file: UploadFile = File(...),
     file_type: str = Form(...),  # "headers", "lines", or "customers"
+    _auth=Depends(_require_api_key),
 ):
     """Upload a P21 CSV export. file_type must be 'headers', 'lines', or 'customers'."""
     if file_type not in ("headers", "lines", "customers"):
@@ -1332,7 +1377,7 @@ async def upload_p21_csv(
 _build_status = {"state": "idle", "result": None}
 
 @app.post("/api/v1/crosswalk/sync-from-blob")
-async def sync_crosswalks_endpoint(rebuild: bool = False):
+async def sync_crosswalks_endpoint(rebuild: bool = False, _auth=Depends(_require_api_key)):
     """
     Download every file under the blob 'crosswalk/' prefix onto the
     persistent disk (p21_data/, crosswalks/, quote_data/). Optionally run
@@ -1412,7 +1457,7 @@ async def _bootstrap_crosswalks_if_empty():
 
 
 @app.post("/api/v1/crosswalk/build")
-async def build_crosswalks(background_tasks=None):
+async def build_crosswalks(background_tasks=None, _auth=Depends(_require_api_key)):
     """Build crosswalk CSVs from uploaded P21 exports. Runs in background."""
     import threading
 

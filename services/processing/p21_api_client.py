@@ -492,14 +492,16 @@ class P21ApiClient:
                 dt = datetime.strptime(date_str[:10], "%Y-%m-%d")
                 return dt.strftime("%m/%d/%Y")
             except ValueError:
-                return date_str[:10]
+                logger.warning(f"_to_p21_date: unrecognized YYYY-MM-DD variant '{date_str}', returning empty")
+                return ""
         if len(date_str) >= 10 and date_str[2] == "/":
             return date_str[:10]
         try:
             dt = datetime.fromisoformat(date_str.replace("Z", "").split("T")[0])
             return dt.strftime("%m/%d/%Y")
         except (ValueError, AttributeError):
-            return date_str[:10]
+            logger.warning(f"_to_p21_date: unrecognized date format '{date_str}', returning empty")
+            return ""
 
     def generate_payload_json(self, po_data: dict) -> str:
         """Generate the P21 Transaction API payload as formatted JSON for manual testing."""
