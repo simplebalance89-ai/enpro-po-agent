@@ -29,6 +29,7 @@ class CustomerMatch:
     p21_customer_name: str = ""
     p21_address_id: str = ""
     match_score: float = 0.0
+    shipto_score: float = 0.0  # independent ship-to address confidence (not derived from customer_score)
     match_method: str = ""  # learned, exact_name_zip, fuzzy, po_pattern
     candidates: list = field(default_factory=list)  # top alternatives
 
@@ -147,10 +148,18 @@ class CustomerCrosswalkEngine:
             for row in self.customer_xw:
                 if (row.get("source_system", "") == source_system and
                         row.get("source_customer_id", "") == source_customer_id):
+                    # Compute independent ship-to score even for learned matches
+                    shipto = composite_address_score(
+                        ship2_name, ship2_add1, ship2_city, ship2_state, ship2_zip,
+                        row.get("ship2_name", ""), row.get("ship2_add1", ""),
+                        row.get("ship2_city", ""), row.get("ship2_state", ""),
+                        row.get("ship2_zip", ""),
+                    )
                     return CustomerMatch(
                         p21_customer_id=row["p21_customer_id"],
                         p21_customer_name=row.get("p21_customer_name", ""),
                         match_score=1.0,
+                        shipto_score=round(shipto, 4),
                         match_method="learned",
                     )
 
@@ -166,6 +175,7 @@ class CustomerCrosswalkEngine:
                         p21_customer_id=row["p21_customer_id"],
                         p21_customer_name=row.get("p21_customer_name", ""),
                         match_score=0.95,
+                        shipto_score=0.95,  # name+zip exact is strong ship-to evidence
                         match_method="exact_name_zip",
                     )
 
@@ -193,16 +203,20 @@ class CustomerCrosswalkEngine:
             best_cid = max(cid_counts, key=cid_counts.get) if cid_counts else ""
             if best_cid:
                 cust = self.customers_p21.get(best_cid, {})
+                # shipto_score for po_pattern: use fuzzy score if candidates found, else low
+                po_shipto = candidates[0][0] if candidates else 0.50
                 po_match = CustomerMatch(
                     p21_customer_id=best_cid,
                     p21_customer_name=cust.get("customer_name", ""),
                     match_score=0.85,
+                    shipto_score=round(po_shipto, 4),
                     match_method="po_pattern",
                 )
                 # If fuzzy also found this customer with higher score, use that
                 for score, row in candidates:
                     if row.get("p21_customer_id", "") == best_cid and score > 0.85:
                         po_match.match_score = score
+                        po_match.shipto_score = round(score, 4)
                         po_match.match_method = "fuzzy+po_confirm"
                         break
                 po_match.candidates = [
@@ -220,6 +234,7 @@ class CustomerCrosswalkEngine:
                 p21_customer_id=best_row["p21_customer_id"],
                 p21_customer_name=best_row.get("p21_customer_name", ""),
                 match_score=round(best_score, 4),
+                shipto_score=round(best_score, 4),  # fuzzy address score IS the ship-to score
                 match_method="fuzzy",
                 candidates=[
                     {"customer_id": r[1]["p21_customer_id"],
@@ -232,6 +247,7 @@ class CustomerCrosswalkEngine:
         # No match
         return CustomerMatch(
             match_score=0.0,
+            shipto_score=0.0,
             match_method="none",
             candidates=[
                 {"customer_id": r[1]["p21_customer_id"],
@@ -275,10 +291,14 @@ class CustomerCrosswalkEngine:
                         price_in_range=price_ok,
                     )
 
-        # Step 2: Global part number lookup
+        # Step 2: Global part number lookup — prefer rows matching current customer
         if part in self.global_items:
             rows = self.global_items[part]
-            best = rows[0]  # highest seen_count (pre-sorted)
+            # If customer known, prefer their row; fall back to global best otherwise
+            best = next(
+                (r for r in rows if p21_customer_id and r.get("p21_customer_id", "") == p21_customer_id),
+                rows[0],  # global best (highest seen_count, pre-sorted)
+            )
             price_ok = self._check_price_range(best, unit_price)
             return ItemMatch(
                 p21_inv_mast_uid=best.get("p21_inv_mast_uid", ""),

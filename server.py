@@ -494,7 +494,7 @@ async def _process_po_to_so(header, lines, raw_content, source, fmt) -> dict:
     dup = engine.check_duplicate_po(header.po_no, cust_match.p21_customer_id)
 
     # 4. Confidence scoring (4-dimension)
-    ship_to_score = cust_match.match_score * 0.95 if cust_match.p21_customer_id else 0.0
+    ship_to_score = cust_match.shipto_score if cust_match.p21_customer_id else 0.0
     conf = score_customer_po(
         customer_score=cust_match.match_score,
         shipto_score=ship_to_score,

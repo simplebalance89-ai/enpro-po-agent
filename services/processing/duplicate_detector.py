@@ -21,7 +21,8 @@ def generate_intake_id(po_number: str, vendor_id: str, source: str) -> str:
 
 
 def is_duplicate(intake_id: str, po_number: str, source: str) -> bool:
-    """Check staging DB for same intake_id or same PO# from same source in last 30 days."""
+    """Check staging DB for same intake_id or same PO# from same source in last 30 days.
+    Falls back to local_store check when SQL is unavailable."""
     try:
         conn = get_staging_conn()
         cur = conn.cursor()
@@ -35,8 +36,13 @@ def is_duplicate(intake_id: str, po_number: str, source: str) -> bool:
         conn.close()
         return count > 0
     except Exception as e:
-        logger.warning(f"Duplicate check failed (continuing): {e}")
-        return False
+        logger.warning(f"SQL duplicate check unavailable, falling back to local store: {e}")
+        try:
+            from services.processing import local_store
+            return local_store.is_duplicate(intake_id, po_number, source)
+        except Exception as e2:
+            logger.warning(f"Local store duplicate check also failed: {e2}")
+            return False
 
 
 def log_intake(payload) -> None:
