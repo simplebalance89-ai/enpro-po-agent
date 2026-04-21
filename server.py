@@ -1142,36 +1142,14 @@ async def approve_po(intake_id: str, req: ApproveRequest, _auth=Depends(_require
         except Exception as e:
             logger.error(f"Learning loop error: {e}")
 
-    # Submit to P21 (API if configured, CISM fallback if not)
-    p21_result = {}
-    try:
-        updated_po = local_store.get_po(intake_id)
-        # Inject customer defaults (contact_id, address_id, terms, carrier)
-        cust_id = updated_po.get("customer_match", {}).get("p21_id", "")
-        if cust_id:
-            engine = _get_customer_engine()
-            updated_po["customer_defaults"] = engine.get_customer_defaults(cust_id)
-
-        from services.processing.p21_so_submitter import submit_to_p21
-        p21_result = await submit_to_p21(updated_po)
-
-        # Store P21 result on the PO record
-        local_store.update_po(intake_id, {
-            "p21_result": p21_result,
-            "p21_order_no": p21_result.get("order_no", ""),
-            "p21_method": p21_result.get("method", ""),
-        })
-    except Exception as e:
-        logger.error(f"P21 submission error: {e}")
-        p21_result = {"method": "error", "status": "error", "message": str(e)}
-
-    batch = get_batch_status()
+    pv = local_store.get_po(intake_id).get("payload_validation", {})
     return {
         "status": "approved",
         "intake_id": intake_id,
-        "p21": p21_result,
-        "batch_headers": batch["header_count"],
-        "batch_lines": batch["line_count"],
+        "payload_validation": {
+            "status": pv.get("status", "unknown"),
+            "errors": pv.get("errors", []),
+        },
     }
 
 

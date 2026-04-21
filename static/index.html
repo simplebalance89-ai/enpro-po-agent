@@ -600,7 +600,8 @@ async function approvePO(id) {
   try {
     const resp = await fetch(`${API}/api/v1/review/po/${id}/approve`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({reviewer, notes:''}) });
     const ar = await resp.json();
-    alert(`Approved! Added to CISM batch.\n\nBatch now has ${ar.batch_headers||'?'} POs, ${ar.batch_lines||'?'} lines.\nGo to CISM Batch tab to see the file.`);
+    const pvStatus = ar.payload_validation?.status === 'batch_ready' ? 'Batch Ready ✓' : 'Needs Fix — ' + (ar.payload_validation?.errors||[]).map(e=>e.message||e.code).join('; ');
+    alert(`Approved — ${pvStatus}`);
     loadQueue(currentFilter); loadStats();
     selectedId = null;
     document.getElementById('detailPanel').innerHTML = '<div class="empty">Select a PO from the queue to review</div>';
