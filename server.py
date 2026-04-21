@@ -728,6 +728,33 @@ async def get_p21_payload(intake_id: str):
     )
 
 
+@app.get("/api/v1/p21/payload/{intake_id}/download")
+async def download_p21_payload(intake_id: str):
+    """Download the P21 Transaction API payload JSON as a file attachment."""
+    po = local_store.get_po(intake_id)
+    if not po:
+        raise HTTPException(404, f"PO {intake_id} not found")
+
+    cust_id = po.get("customer_match", {}).get("p21_id", "")
+    if cust_id:
+        try:
+            engine = _get_customer_engine()
+            po["customer_defaults"] = engine.get_customer_defaults(cust_id)
+        except Exception:
+            po["customer_defaults"] = {}
+    else:
+        po["customer_defaults"] = {}
+
+    from services.processing.p21_api_client import build_p21_payload
+    payload = build_p21_payload(po)
+
+    po_no = po.get("header", {}).get("po_no", intake_id)
+    return JSONResponse(
+        content=payload,
+        headers={"Content-Disposition": f'attachment; filename="p21_payload_{po_no}_{intake_id}.json"'},
+    )
+
+
 @app.post("/api/v1/p21/payload/from-file")
 async def generate_p21_payload_from_file(file: UploadFile = File(...)):
     """Upload a cXML/PDF PO file, parse it, run crosswalk, and return the P21 API payload.

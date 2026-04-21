@@ -394,6 +394,7 @@ function selectPO(id) {
     <div class="action-bar">
       <button class="btn btn-green" onclick="approvePO('${po.intake_id}')">Approve & Create SO</button>
       <button class="btn btn-blue" onclick="editPO('${po.intake_id}')">Edit PO</button>
+      <a class="btn btn-gray" href="${API}/api/v1/p21/payload/${po.intake_id}/download" download>Download P21 Payload</a>
       <button class="btn btn-red" onclick="rejectPO('${po.intake_id}')">Reject</button>
     </div>
   `;
@@ -750,7 +751,7 @@ async function loadProcessed() {
           <td>${r.lines_count||0}</td>
           <td>${r.reviewed_by||'auto'} ${r.reviewed_at?(new Date(r.reviewed_at)).toLocaleDateString():''}</td>
           <td style="font-family:monospace;font-size:11px;">${r.import_set_no||'-'}</td>
-          <td>${r.import_set_no ? `<a href="${API}/api/v1/cism/download/${r.intake_id}/header" class="btn btn-gray" style="padding:3px 8px;font-size:11px;">Header</a> <a href="${API}/api/v1/cism/download/${r.intake_id}/lines" class="btn btn-gray" style="padding:3px 8px;font-size:11px;">Lines</a>` : '-'}</td>
+          <td>${r.import_set_no ? `<a href="${API}/api/v1/cism/download/${r.intake_id}/header" class="btn btn-gray" style="padding:3px 8px;font-size:11px;">Header</a> <a href="${API}/api/v1/cism/download/${r.intake_id}/lines" class="btn btn-gray" style="padding:3px 8px;font-size:11px;">Lines</a>` : '-'} <a href="${API}/api/v1/p21/payload/${r.intake_id}/download" class="btn btn-gray" style="padding:3px 8px;font-size:11px;" download>P21 JSON</a></td>
         </tr>`).join('');
     } else { procEmpty.style.display='block'; procTbl.style.display='none'; }
 
