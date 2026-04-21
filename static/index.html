@@ -104,6 +104,14 @@ tr:hover { background: #141620; }
 .help-toggle .arrow { font-size:10px; color:#475569; transition:transform .15s; display:inline-block; }
 details.help-section[open] > summary .arrow { transform:rotate(90deg); }
 .help-body { padding:0 16px 14px; }
+/* Preflight panel */
+.preflight-panel { background:#141620; border:1px solid #2a2d3a; border-radius:8px; padding:16px; margin-top:16px; }
+.preflight-chips { display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+.preflight-chip { padding:6px 14px; border-radius:8px; font-size:13px; font-weight:600; }
+.preflight-chip.selected { background:#1e3a5f; color:#60a5fa; }
+.preflight-chip.included { background:#0d3320; color:#4ade80; }
+.preflight-chip.skipped  { background:#3b1111; color:#f87171; }
+.reason-badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:700; letter-spacing:.5px; background:#2d1b00; color:#fbbf24; font-family:monospace; }
 </style>
 </head>
 <body>
@@ -375,9 +383,11 @@ details.help-section[open] > summary .arrow { transform:rotate(90deg); }
   <div class="xw-section">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px;">
       <h3 style="margin:0;">P21 Transaction API Payloads</h3>
+      <button id="preflightBtn" class="btn btn-gray" style="padding:6px 14px;font-size:12px;" disabled onclick="runPreflight()">Run Batch Preflight</button>
       <button id="batchDownloadBtn" class="btn btn-blue" style="padding:6px 14px;font-size:12px;" disabled onclick="downloadBatchPayload()">Download Batch JSON</button>
+      <span id="preflightHint" style="font-size:11px;color:#64748b;display:none;">⚠ Preflight recommended before download</span>
     </div>
-    <p class="desc" style="margin-top:6px;">All ingested POs. Click <strong>View JSON</strong> to inspect the payload, <strong>Download</strong> to save the file. Check rows and use <strong>Download Batch JSON</strong> to export multiple POs at once.</p>
+    <p class="desc" style="margin-top:6px;">Check rows, then click <strong>Run Batch Preflight</strong> to see what will be included before downloading. Use <strong>Download Batch JSON</strong> to export.</p>
     <div id="batchNotice" style="display:none;margin-bottom:10px;padding:8px 12px;border-radius:6px;font-size:12px;background:#1a1d27;border:1px solid #2a2d3a;color:#a5f3fc;"></div>
     <div id="payloadsEmpty" class="empty" style="display:none;">No POs found.</div>
     <div class="scroll-table">
@@ -389,6 +399,7 @@ details.help-section[open] > summary .arrow { transform:rotate(90deg); }
         <tbody id="payloadsTbody"></tbody>
       </table>
     </div>
+    <div id="preflightPanel" class="preflight-panel" style="display:none;"></div>
   </div>
 </div>
 
@@ -1085,7 +1096,7 @@ async function loadPayloads() {
     if (!data.length) { empty.style.display='block'; tbl.style.display='none'; return; }
     empty.style.display='none'; tbl.style.display='table';
     tbody.innerHTML = data.map(r => `<tr>
-      <td style="text-align:center;"><input type="checkbox" class="payload-check" value="${r.intake_id}" onchange="updateBatchBtn()"></td>
+      <td style="text-align:center;"><input type="checkbox" class="payload-check" value="${r.intake_id}" onchange="_preflightRan=false;updateBatchBtn()"></td>
       <td style="font-weight:600;color:#fff;">${r.po_no||'-'}</td>
       <td style="font-family:monospace;font-size:11px;color:#64748b;">${r.intake_id}</td>
       <td>${r.customer_name||'-'} ${r.customer_id ? '<span style="color:#64748b;font-size:11px;">('+r.customer_id+')</span>' : ''}</td>
@@ -1102,17 +1113,107 @@ async function loadPayloads() {
 }
 
 function toggleSelectAll(cb) {
+  _preflightRan = false;
   document.querySelectorAll('.payload-check').forEach(c => { c.checked = cb.checked; });
   updateBatchBtn();
 }
 
+let _preflightRan = false;
+
 function updateBatchBtn() {
   const checked = document.querySelectorAll('.payload-check:checked').length;
   document.getElementById('batchDownloadBtn').disabled = checked === 0;
+  const pfBtn = document.getElementById('preflightBtn');
+  if (pfBtn) pfBtn.disabled = checked === 0;
+  const hint = document.getElementById('preflightHint');
+  if (hint) hint.style.display = (checked > 0 && !_preflightRan) ? 'inline' : 'none';
+  // Reset preflight panel when selection changes
+  if (!_preflightRan) {
+    const panel = document.getElementById('preflightPanel');
+    if (panel) {
+      panel.style.display = checked > 0 ? 'block' : 'none';
+      panel.innerHTML = checked > 0 ? '<div style="color:#64748b;font-size:13px;">Click <strong style="color:#e0e0e0;">Run Batch Preflight</strong> to validate selection before downloading.</div>' : '';
+    }
+  }
   const sa = document.getElementById('selectAllPayloads');
   const all = document.querySelectorAll('.payload-check').length;
   if (sa) sa.indeterminate = checked > 0 && checked < all;
   if (sa) sa.checked = all > 0 && checked === all;
+}
+
+async function runPreflight() {
+  const ids = Array.from(document.querySelectorAll('.payload-check:checked')).map(c => c.value);
+  const panel = document.getElementById('preflightPanel');
+  if (!ids.length) {
+    panel.style.display = 'block';
+    panel.innerHTML = '<div style="color:#64748b;font-size:13px;">Select one or more POs to run preflight.</div>';
+    return;
+  }
+  panel.style.display = 'block';
+  panel.innerHTML = '<div style="color:#64748b;font-size:13px;">Running preflight…</div>';
+  try {
+    const resp = await fetch(`${API}/api/v1/p21/payload/batch/preflight`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({intake_ids: ids, approved_only: true}),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    _preflightRan = true;
+    const hint = document.getElementById('preflightHint');
+    if (hint) hint.style.display = data.skipped_count > 0 ? 'inline' : 'none';
+    renderPreflightPanel(data);
+  } catch(e) {
+    panel.innerHTML = `<div style="color:#f87171;font-size:13px;">Preflight failed: ${e.message}</div>`;
+  }
+}
+
+function renderPreflightPanel(data) {
+  const panel = document.getElementById('preflightPanel');
+  const rcColor = { NOT_FOUND:'#f87171', NOT_APPROVED:'#fbbf24', MISSING_CUSTOMER_ID:'#f87171', NO_VALID_LINE_ITEMS:'#f87171', BUILD_ERROR:'#f87171' };
+  const includedRows = (data.included || []).map(i =>
+    `<tr>
+      <td style="font-weight:600;color:#fff;">${i.po_no}</td>
+      <td>${i.customer || '—'}</td>
+      <td style="text-align:center;">${i.lines}</td>
+      <td><span class="badge-conf ${i.confidence}">${(i.confidence||'').toUpperCase()}</span></td>
+      <td style="color:#4ade80;font-weight:600;font-size:11px;">${(i.status||'').toUpperCase()}</td>
+    </tr>`
+  ).join('');
+  const skippedRows = (data.skipped || []).map(s =>
+    `<tr>
+      <td style="font-weight:600;color:#fff;">${s.po_no || s.intake_id}</td>
+      <td><span class="reason-badge">${s.reason_code}</span></td>
+      <td style="color:#94a3b8;font-size:12px;">${s.reason_message}</td>
+    </tr>`
+  ).join('');
+
+  let html = `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#64748b;margin-bottom:10px;">Batch Preflight Result</div>`;
+  html += `<div class="preflight-chips">
+    <span class="preflight-chip selected">Selected: ${data.selected_count}</span>
+    <span class="preflight-chip included">Included: ${data.included_count}</span>
+    ${data.skipped_count > 0 ? `<span class="preflight-chip skipped">Skipped: ${data.skipped_count}</span>` : ''}
+  </div>`;
+
+  if (data.included_count > 0) {
+    html += `<div style="font-size:11px;text-transform:uppercase;color:#4ade80;letter-spacing:1px;margin-bottom:6px;font-weight:700;">Will be included (${data.included_count})</div>`;
+    html += `<div class="scroll-table" style="max-height:180px;margin-bottom:14px;"><table style="font-size:12px;">
+      <tr><th>PO #</th><th>Customer</th><th>Lines</th><th>Conf</th><th>Status</th></tr>
+      ${includedRows}
+    </table></div>`;
+  } else {
+    html += `<div style="color:#f87171;font-size:13px;margin-bottom:10px;">⚠ No POs will be included — fix issues below before downloading.</div>`;
+  }
+
+  if (data.skipped_count > 0) {
+    html += `<div style="font-size:11px;text-transform:uppercase;color:#f87171;letter-spacing:1px;margin-bottom:6px;font-weight:700;">Will be skipped (${data.skipped_count})</div>`;
+    html += `<div class="scroll-table" style="max-height:180px;"><table style="font-size:12px;">
+      <tr><th>PO #</th><th>Reason Code</th><th>Details</th></tr>
+      ${skippedRows}
+    </table></div>`;
+  }
+
+  panel.innerHTML = html;
 }
 
 async function downloadBatchPayload() {

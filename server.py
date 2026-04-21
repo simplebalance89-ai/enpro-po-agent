@@ -851,6 +851,79 @@ async def batch_payload_summary(req: BatchPayloadRequest):
     }
 
 
+@app.post("/api/v1/p21/payload/batch/preflight")
+async def batch_payload_preflight(req: BatchPayloadRequest):
+    """Rich preflight check — same rules as batch/download but returns full PO metadata and reason codes."""
+    selected_count = len(req.intake_ids)
+    included = []
+    skipped = []
+
+    for intake_id in req.intake_ids:
+        po = local_store.get_po(intake_id)
+        if not po:
+            skipped.append({
+                "intake_id": intake_id,
+                "po_no": "",
+                "reason_code": "NOT_FOUND",
+                "reason_message": "PO not found in store",
+            })
+            continue
+
+        po_no = po.get("po_no") or po.get("header", {}).get("po_no", intake_id)
+        cm = po.get("customer_match", {})
+        cust_name = cm.get("name") or po.get("header", {}).get("customer_name_p21", "")
+        review_status = po.get("review_status", "pending")
+        confidence = po.get("confidence", "")
+        lines_count = len(po.get("lines", []))
+
+        if req.approved_only and review_status != "approved":
+            skipped.append({
+                "intake_id": intake_id,
+                "po_no": po_no,
+                "reason_code": "NOT_APPROVED",
+                "reason_message": f"Status is '{review_status}' — must be approved",
+            })
+            continue
+
+        cust_id = cm.get("p21_id", "")
+        if not cust_id:
+            skipped.append({
+                "intake_id": intake_id,
+                "po_no": po_no,
+                "reason_code": "MISSING_CUSTOMER_ID",
+                "reason_message": "No P21 customer ID — use Edit PO to map customer",
+            })
+            continue
+
+        lines = po.get("lines", [])
+        if not any(ln.get("item_id_p21", "") for ln in lines):
+            skipped.append({
+                "intake_id": intake_id,
+                "po_no": po_no,
+                "reason_code": "NO_VALID_LINE_ITEMS",
+                "reason_message": "No line items have a P21 item ID mapped",
+            })
+            continue
+
+        included.append({
+            "intake_id": intake_id,
+            "po_no": po_no,
+            "customer": cust_name,
+            "customer_id": cust_id,
+            "lines": lines_count,
+            "status": review_status,
+            "confidence": confidence,
+        })
+
+    return {
+        "selected_count": selected_count,
+        "included_count": len(included),
+        "skipped_count": len(skipped),
+        "included": included,
+        "skipped": skipped,
+    }
+
+
 @app.post("/api/v1/p21/payload/batch/download")
 async def batch_payload_download(req: BatchPayloadRequest):
     """Build and download a merged P21 batch payload for a set of POs."""
