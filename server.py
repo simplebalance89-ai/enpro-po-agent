@@ -21,6 +21,7 @@ Routes:
 """
 
 import hashlib
+import json
 import logging
 import os
 from datetime import datetime
@@ -180,7 +181,7 @@ async def dashboard():
 async def micdrop():
     """Mic drop page — proves the P21 payload is structurally correct and ready.
     Always works: uses a real PO if available, otherwise shows a demo PO."""
-    all_pos = local_store.get_all_pos()
+    all_pos = local_store.list_pos()
     approved = [po for po in all_pos if po.get("review_status") == "approved"]
     po = approved[-1] if approved else (all_pos[-1] if all_pos else None)
 
