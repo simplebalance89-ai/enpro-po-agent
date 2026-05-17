@@ -63,6 +63,7 @@ from services.processing.confidence_scorer import score_customer_po
 from services.processing.cism_so_generator import generate_cism_so
 from services.processing.crosswalk_learner import learn_from_approval
 from services.processing import local_store
+from services.processing.mapping_suggester import suggest_mappings, write_rejection_log
 from services.processing.cism_batch import add_to_batch, get_batch_status, clear_batch
 from services.processing import outbound_store
 from services.processing.outbound_mapper import build_payload as build_outbound_payload
@@ -1440,6 +1441,19 @@ class EditPORequest(BaseModel):
     lines: Optional[list] = None  # [{line_no, item_id_p21, qty_ordered, unit_price, ...}]
     notes: Optional[str] = None
 
+
+class SuggestionDecisionItem(BaseModel):
+    decision: str  # accept | reject
+    target_type: str  # customer | item
+    line_no: Optional[int] = None
+    selected_id: str
+    rationale: Optional[str] = ""
+
+
+class MappingDecisionRequest(BaseModel):
+    user_decisions: list[SuggestionDecisionItem]
+    audit: Optional[dict] = None
+
 @app.post("/api/v1/review/po/{intake_id}/edit")
 async def edit_po(intake_id: str, req: EditPORequest, _auth=Depends(_require_api_key)):
     """Edit a PO — update customer mapping, line items, ship-to, etc."""
@@ -1523,6 +1537,126 @@ async def edit_po(intake_id: str, req: EditPORequest, _auth=Depends(_require_api
         "reason": new_conf.reason,
         "review_required": new_conf.review_required,
     }
+
+
+# ── Mapping Suggestion Agent ────────────────────────────────────────────────
+
+@app.post("/api/v1/suggest/mappings/{intake_id}")
+async def suggest_mappings_endpoint(intake_id: str, _auth=Depends(_require_api_key)):
+    """Get mapping suggestions for a PO."""
+    po = local_store.get_po(intake_id)
+    if not po:
+        raise HTTPException(404, f"PO {intake_id} not found")
+
+    engine = _get_customer_engine()
+    result = await suggest_mappings(po, engine, None)
+    return result
+
+
+@app.post("/api/v1/suggest/mappings/{intake_id}/decide")
+async def submit_mapping_decisions(
+    intake_id: str,
+    req: MappingDecisionRequest,
+    _auth=Depends(_require_api_key),
+):
+    """Submit accept/reject decisions for mapping suggestions."""
+    po = local_store.get_po(intake_id)
+    if not po:
+        raise HTTPException(404, f"PO {intake_id} not found")
+
+    global _customer_engine
+
+    accepted = []
+    rejected = []
+
+    for d in req.user_decisions:
+        if d.decision == "accept":
+            if d.target_type == "customer":
+                header = po.get("header", {})
+                cust_match = po.get("customer_match", {})
+                header["customer_id_p21"] = d.selected_id
+                header["customer_match_method"] = "manual_accept"
+                header["customer_match_score"] = 1.0
+                cust_match["p21_id"] = d.selected_id
+                cust_match["score"] = 1.0
+                cust_match["method"] = "manual_accept"
+                local_store.update_po(
+                    intake_id, {"header": header, "customer_match": cust_match}
+                )
+                try:
+                    engine = _get_customer_engine()
+                    cust_detail = engine.get_customer_detail(d.selected_id)
+                    learn_from_approval(
+                        p21_customer_id=d.selected_id,
+                        p21_customer_name=cust_detail.get("customer_name", ""),
+                        source_system=po.get("source", ""),
+                        ship2_name=header.get("ship2_name", ""),
+                        ship2_add1=header.get("ship2_add1", ""),
+                        ship2_city=header.get("ship2_city", ""),
+                        ship2_state=header.get("ship2_state", ""),
+                        ship2_zip=header.get("ship2_zip", ""),
+                        po_no=po.get("po_no", ""),
+                        lines=[],
+                        crosswalk_dir=settings.crosswalk_dir,
+                        provenance="manual_accept",
+                    )
+                    _customer_engine = None
+                except Exception as e:
+                    logger.error(f"Learning loop error on customer accept: {e}")
+
+            elif d.target_type == "item":
+                lines = po.get("lines", [])
+                matched_line = None
+                for line in lines:
+                    if line.get("line_no") == d.line_no:
+                        line["item_id_p21"] = d.selected_id
+                        line["crosswalk_match_score"] = 1.0
+                        matched_line = line
+                        break
+                local_store.update_po(intake_id, {"lines": lines})
+                try:
+                    header = po.get("header", {})
+                    cust_id = (
+                        po.get("customer_match", {}).get("p21_id", "")
+                        or header.get("customer_id_p21", "")
+                    )
+                    if cust_id and matched_line:
+                        learn_from_approval(
+                            p21_customer_id=cust_id,
+                            source_system=po.get("source", ""),
+                            po_no=po.get("po_no", ""),
+                            lines=[
+                                {
+                                    "supplier_part_id": matched_line.get(
+                                        "supplier_part_id", ""
+                                    ),
+                                    "inv_mast_uid": d.selected_id,
+                                    "unit_price": matched_line.get("unit_price", 0),
+                                    "unit_of_measure": matched_line.get(
+                                        "unit_of_measure", "EA"
+                                    ),
+                                    "item_description": matched_line.get(
+                                        "item_description", ""
+                                    ),
+                                    "line_no": d.line_no,
+                                }
+                            ],
+                            crosswalk_dir=settings.crosswalk_dir,
+                            provenance="manual_accept",
+                        )
+                        _customer_engine = None
+                except Exception as e:
+                    logger.error(f"Learning loop error on item accept: {e}")
+
+            accepted.append(d.dict())
+
+        elif d.decision == "reject":
+            rejected.append(d.dict())
+
+    if rejected:
+        write_rejection_log(intake_id, rejected)
+
+    return {"status": "recorded", "accepted": len(accepted), "rejected": len(rejected)}
 
 
 # ── CISM Batch Endpoints ────────────────────────────────────────────────────

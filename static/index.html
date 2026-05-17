@@ -120,6 +120,25 @@ details.help-section[open] > summary .arrow { transform:rotate(90deg); }
 .validation-errors .ve-title { font-size:10px; text-transform:uppercase; color:#f87171; letter-spacing:1px; font-weight:700; margin-bottom:4px; }
 .validation-errors .ve-item { font-size:12px; color:#fca5a5; padding:2px 0; }
 .validation-errors .ve-code { font-family:monospace; font-size:10px; background:#2d0f0f; padding:1px 5px; border-radius:3px; margin-right:5px; }
+
+/* Suggestion chips */
+.suggestion-box { background:#141620; border:1px solid #2a2d3a; border-radius:6px; padding:10px 12px; margin:8px 0; }
+.suggestion-box .suggestion-title { font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#64748b; margin-bottom:6px; }
+.suggestion-chip { display:flex; align-items:center; gap:8px; background:#1a1d27; border:1px solid #2a2d3a; border-radius:6px; padding:6px 10px; margin-bottom:6px; font-size:12px; }
+.suggestion-chip .suggestion-info { flex:1; }
+.suggestion-chip .suggestion-name { color:#e0e0e0; font-weight:600; }
+.suggestion-chip .suggestion-meta { color:#94a3b8; font-size:11px; }
+.suggestion-chip .suggestion-evidence { color:#475569; font-size:10px; margin-top:2px; }
+.suggestion-chip .suggestion-actions { display:flex; gap:6px; }
+.suggestion-chip button { padding:3px 10px; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer; border:none; }
+.suggestion-chip .btn-accept { background:#16a34a; color:#fff; }
+.suggestion-chip .btn-accept:hover { background:#15803d; }
+.suggestion-chip .btn-reject { background:#334155; color:#e2e8f0; }
+.suggestion-chip .btn-reject:hover { background:#475569; }
+.suggestion-chip.accepted { border-color:#16a34a; background:#0d1f14; }
+.suggestion-chip.rejected { opacity:0.4; }
+.suggestion-chip.hidden { display:none; }
+.overwrite-guard-banner { background:#2d1b00; border:1px solid #78350f; color:#fbbf24; padding:8px 12px; border-radius:6px; font-size:12px; margin-bottom:10px; }
 </style>
 </head>
 <body>
@@ -718,10 +737,45 @@ async function editPO(id) {
     `<option value="${i.p21_inv_mast_uid}" data-desc="${i.p21_item_desc||''}" data-uom="${i.unit_of_measure||'EA'}" data-price="${i.unit_price_last||''}">${i.customer_part_number} — ${(i.p21_item_desc||'').substring(0,30)} (${i.seen_count}x)</option>`
   ).join('');
 
+  // Fetch suggestions for red/yellow POs
+  let suggestionData = null;
+  if (po.confidence === 'red' || po.confidence === 'yellow') {
+    try {
+      const resp = await fetch(`${API}/api/v1/suggest/mappings/${id}`, {method:'POST', headers:{'Content-Type':'application/json'}});
+      if (resp.ok) suggestionData = await resp.json();
+    } catch(e) { console.error('Suggestion fetch failed:', e); }
+  }
+
+  const overwriteGuard = suggestionData?.overwrite_guard || false;
+  const custSuggestions = suggestionData?.suggestions?.customer_suggestions || [];
+  const itemSuggestions = suggestionData?.suggestions?.item_suggestions || [];
+  const itemSuggestionMap = {};
+  itemSuggestions.forEach(s => { itemSuggestionMap[s.line_no] = s.candidates || []; });
+
   const panel = document.getElementById('detailPanel');
   panel.innerHTML = `
     <h2>Edit PO ${po.po_number || '?'} <span class="badge-conf ${po.confidence}">${(po.confidence||'').toUpperCase()}</span></h2>
     <div style="color:#94a3b8; font-size:13px; margin-bottom:16px;">Edit customer mapping, line items, quantities, and pricing. Item dropdown shows this customer's order history sorted by frequency.</div>
+
+    ${overwriteGuard ? `<div class="overwrite-guard-banner" id="overwriteGuardBanner">⚠ This PO already has a high-confidence mapping (confidence: ${suggestionData?.current_confidence || '?'}). Accepting a suggestion will overwrite it.</div>` : ''}
+
+    ${custSuggestions.length ? `
+    <div class="suggestion-box" id="custSuggestionsBox">
+      <div class="suggestion-title">Suggested Customer Mappings</div>
+      ${custSuggestions.map((c, idx) => `
+        <div class="suggestion-chip" id="custChip_${idx}" data-cid="${c.candidate_id}">
+          <div class="suggestion-info">
+            <div class="suggestion-name">${c.candidate_name} (${c.candidate_id})</div>
+            <div class="suggestion-meta">${c.reason} · confidence ${(c.confidence*100).toFixed(0)}%</div>
+            <div class="suggestion-evidence">${c.evidence}</div>
+          </div>
+          <div class="suggestion-actions">
+            <button class="btn-accept" onclick="acceptSuggestion('${id}', 'customer', null, '${c.candidate_id}', '${c.candidate_name.replace(/'/g, "\\'")}', ${overwriteGuard})">Accept</button>
+            <button class="btn-reject" onclick="rejectSuggestion('${id}', 'customer', null, '${c.candidate_id}')">Reject</button>
+          </div>
+        </div>
+      `).join('')}
+    </div>` : ''}
 
     <div class="meta-grid" style="margin-bottom:16px;">
       <div class="meta-box">
@@ -741,17 +795,42 @@ async function editPO(id) {
     <h3 style="margin:12px 0 8px;">Line Items — <span style="color:#64748b; font-size:12px;">${custItems.length} items in this customer's history</span></h3>
     <table>
       <tr><th>#</th><th>Item (from customer history)</th><th>Description</th><th>Qty</th><th>Price</th><th>UOM</th></tr>
-      ${lines.map((l,i) => `<tr>
-        <td>${l.line_no || i+1}</td>
-        <td><select id="editItem_${i}" onchange="fillItemDetails(${i})" style="width:100%; padding:4px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px; max-width:300px;">
-          <option value="${l.item_id_p21||''}">${l.supplier_part_id||'Select item...'} ${l.item_id_p21 ? '(UID:'+l.item_id_p21+')' : ''}</option>
-          ${itemOptions}
-        </select></td>
-        <td><input id="editDesc_${i}" value="${(l.item_description||'').substring(0,40)}" style="width:100%; padding:4px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px;"></td>
-        <td><input id="editQty_${i}" type="number" value="${l.qty_ordered||0}" style="width:70px; padding:4px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px;"></td>
-        <td><input id="editPrice_${i}" type="number" step="0.01" value="${(l.unit_price||0).toFixed?.(2)||'0'}" style="width:90px; padding:4px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px;"></td>
-        <td><input id="editUom_${i}" value="${l.unit_of_measure||'EA'}" style="width:60px; padding:4px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px;"></td>
-      </tr>`).join('')}
+      ${lines.map((l,i) => {
+        const lineNo = l.line_no || i+1;
+        const lineCands = itemSuggestionMap[lineNo] || [];
+        let suggestionHtml = '';
+        if (lineCands.length) {
+          suggestionHtml = `<tr><td colspan="6" style="padding:4px 10px 10px; border-bottom:1px solid #1e2030;">
+            <div class="suggestion-box" style="margin:0;">
+              <div class="suggestion-title">Suggestions for line ${lineNo}</div>
+              ${lineCands.map((c, cidx) => `
+                <div class="suggestion-chip" id="itemChip_${lineNo}_${cidx}">
+                  <div class="suggestion-info">
+                    <div class="suggestion-name">${c.candidate_description} (${c.candidate_item_id})</div>
+                    <div class="suggestion-meta">${c.reason} · confidence ${(c.confidence*100).toFixed(0)}%</div>
+                    <div class="suggestion-evidence">${c.evidence}</div>
+                  </div>
+                  <div class="suggestion-actions">
+                    <button class="btn-accept" onclick="acceptSuggestion('${id}', 'item', ${lineNo}, '${c.candidate_item_id}', '${c.candidate_description.replace(/'/g, "\\'")}', ${overwriteGuard})">Accept</button>
+                    <button class="btn-reject" onclick="rejectSuggestion('${id}', 'item', ${lineNo}, '${c.candidate_item_id}')">Reject</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </td></tr>`;
+        }
+        return `<tr>
+          <td>${lineNo}</td>
+          <td><select id="editItem_${i}" onchange="fillItemDetails(${i})" style="width:100%; padding:4px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px; max-width:300px;">
+            <option value="${l.item_id_p21||''}">${l.supplier_part_id||'Select item...'} ${l.item_id_p21 ? '(UID:'+l.item_id_p21+')' : ''}</option>
+            ${itemOptions}
+          </select></td>
+          <td><input id="editDesc_${i}" value="${(l.item_description||'').substring(0,40)}" style="width:100%; padding:4px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px;"></td>
+          <td><input id="editQty_${i}" type="number" value="${l.qty_ordered||0}" style="width:70px; padding:4px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px;"></td>
+          <td><input id="editPrice_${i}" type="number" step="0.01" value="${(l.unit_price||0).toFixed?.(2)||'0'}" style="width:90px; padding:4px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px;"></td>
+          <td><input id="editUom_${i}" value="${l.unit_of_measure||'EA'}" style="width:60px; padding:4px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px;"></td>
+        </tr>${suggestionHtml}`;
+      }).join('')}
     </table>
 
     <div style="margin-top:12px;">
@@ -764,6 +843,90 @@ async function editPO(id) {
       <button class="btn btn-gray" onclick="selectPO('${po.intake_id}')">Cancel</button>
     </div>
   `;
+}
+
+async function acceptSuggestion(intakeId, targetType, lineNo, selectedId, selectedName, overwriteGuard) {
+  if (overwriteGuard) {
+    if (!confirm('This PO already has a high-confidence mapping. Accepting will overwrite it. Continue?')) return;
+  }
+
+  // Populate edit fields
+  if (targetType === 'customer') {
+    const cidInput = document.getElementById('editCustId');
+    const cnameInput = document.getElementById('editCustName');
+    if (cidInput) cidInput.value = selectedId;
+    if (cnameInput) cnameInput.value = selectedName;
+    // Hide accepted chip
+    const chip = document.querySelector(`#custSuggestionsBox .suggestion-chip[data-cid="${selectedId}"]`);
+    if (chip) { chip.classList.add('accepted'); chip.querySelector('.suggestion-actions').innerHTML = '<span style="color:#4ade80;font-size:11px;font-weight:600;">✓ Accepted</span>'; }
+  } else if (targetType === 'item') {
+    const po = queue.find(p => p.intake_id === intakeId);
+    const lines = po?.lines || [];
+    const lineIdx = lines.findIndex(l => (l.line_no || 0) === lineNo);
+    if (lineIdx >= 0) {
+      const sel = document.getElementById('editItem_' + lineIdx);
+      if (sel) {
+        // Check if option exists
+        let opt = Array.from(sel.options).find(o => o.value === selectedId);
+        if (!opt) {
+          opt = document.createElement('option');
+          opt.value = selectedId;
+          opt.textContent = selectedName + ' (UID:' + selectedId + ')';
+          sel.appendChild(opt);
+        }
+        sel.value = selectedId;
+        fillItemDetails(lineIdx);
+      }
+    }
+    // Hide accepted chip
+    const chips = document.querySelectorAll(`[id^="itemChip_${lineNo}_"]`);
+    chips.forEach(chip => {
+      if (!chip.classList.contains('accepted')) {
+        chip.classList.add('hidden');
+      }
+    });
+    const acceptedChip = Array.from(document.querySelectorAll(`[id^="itemChip_${lineNo}_"]`)).find(c => c.innerText.includes(selectedId));
+    if (acceptedChip) {
+      acceptedChip.classList.remove('hidden');
+      acceptedChip.classList.add('accepted');
+      acceptedChip.querySelector('.suggestion-actions').innerHTML = '<span style="color:#4ade80;font-size:11px;font-weight:600;">✓ Accepted</span>';
+    }
+  }
+
+  // Record acceptance via API
+  try {
+    await fetch(`${API}/api/v1/suggest/mappings/${intakeId}/decide`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        user_decisions: [{decision:'accept', target_type:targetType, line_no:lineNo, selected_id:selectedId}]
+      })
+    });
+  } catch(e) { console.error('Accept decision error:', e); }
+}
+
+async function rejectSuggestion(intakeId, targetType, lineNo, selectedId) {
+  // Hide rejected chip
+  if (targetType === 'customer') {
+    const chip = document.querySelector(`#custSuggestionsBox .suggestion-chip[data-cid="${selectedId}"]`);
+    if (chip) chip.classList.add('hidden');
+  } else if (targetType === 'item') {
+    const chips = document.querySelectorAll(`[id^="itemChip_${lineNo}_"]`);
+    chips.forEach(chip => {
+      if (chip.innerText.includes(selectedId)) chip.classList.add('hidden');
+    });
+  }
+
+  // Record rejection via API
+  try {
+    await fetch(`${API}/api/v1/suggest/mappings/${intakeId}/decide`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        user_decisions: [{decision:'reject', target_type:targetType, line_no:lineNo, selected_id:selectedId}]
+      })
+    });
+  } catch(e) { console.error('Reject decision error:', e); }
 }
 
 function fillItemDetails(lineIdx) {

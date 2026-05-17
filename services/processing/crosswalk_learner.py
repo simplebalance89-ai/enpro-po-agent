@@ -59,6 +59,7 @@ def learn_from_approval(
     # Corrections from human review
     corrections: dict = None,
     crosswalk_dir: str = None,
+    provenance: str = "",
 ):
     """Feed an approved PO match back into the crosswalk CSVs."""
     global CROSSWALK_DIR
