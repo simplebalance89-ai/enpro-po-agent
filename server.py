@@ -473,14 +473,12 @@ async def micdrop():
     if header_edits.get("ship_to_id") or header_edits.get("carrier_id") or header_edits.get("terms_id"): score += 0.20
     item_elem = next((e for e in txn.get("DataElements", []) if e.get("Name") == "TP_ITEMS.items"), {})
     if item_elem.get("Rows"): score += 0.40
-    if po.get("customer_defaults"): score += 0.10
     score = min(score, 1.0)
 
     payload_json = json.dumps(payload, indent=2)
     po_no = po.get("header", {}).get("po_no", "N/A")
     customer_name = po.get("customer_match", {}).get("name", "N/A")
     lines_count = len(po.get("lines", []))
-    has_defaults = bool(po.get("customer_defaults"))
 
     green = "#4ade80"
     dark = "#0f1117"
@@ -1554,7 +1552,7 @@ async def validate_p21_payload(intake_id: str):
 
     payload = build_p21_payload(po)
 
-    # Compute P21 readiness score (0-1)
+    # Compute P21 readiness score
     score = 0.0
     txn = payload["Transactions"][0] if payload.get("Transactions") else {}
     header_elem = next((e for e in txn.get("DataElements", []) if e.get("Name") == "TABPAGE_1.order"), {})
@@ -1567,8 +1565,6 @@ async def validate_p21_payload(intake_id: str):
     item_rows = item_elem.get("Rows", [])
     if item_rows:
         score += 0.40
-    # Boost for having customer defaults
-    if po.get("customer_defaults"): score += 0.10
     score = min(score, 1.0)
 
     return {

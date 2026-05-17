@@ -337,7 +337,10 @@ class P21ApiClient:
             first_line_date = self._to_p21_date(lines[0].get("required_date", ""))
         requested_date = first_line_date or order_date
 
-        # customer_defaults.csv uses "default_*" prefix; normalize to plain names
+        # Build header edits from available data; P21 Transaction API v2 accepts
+        # these fields and will apply customer-master defaults for any omitted values.
+        # Field list derived from template verification/p21_payload_template.json.
+        # NOTE: Official P21 docs should be consulted to confirm required vs optional.
         ship_to_id = defaults.get("ship_to_id") or defaults.get("default_address_id") or header.get("ship_to_id_p21", "")
         carrier_id = defaults.get("carrier_id") or defaults.get("default_carrier_id", "")
         contact_id = defaults.get("contact_id") or defaults.get("default_contact_id", "")
@@ -365,7 +368,7 @@ class P21ApiClient:
             item_id = line.get("item_id_p21") or line.get("supplier_part_id", "")
             line_date = self._to_p21_date(
                 line.get("required_date") or line.get("date_due", "")
-            ) or requested_date
+            ) or order_date
 
             item_edits_raw = [
                 {"Name": "oe_order_item_id", "Value": str(item_id)},
