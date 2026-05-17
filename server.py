@@ -559,7 +559,7 @@ h1 {{ font-size: 32px; color: {green}; margin-bottom: 8px; }}
       </div>
       <div class="meta-item">
         <div class="label">Customer Defaults</div>
-        <div class="value">{'✓ Loaded' if has_defaults else '— P21 will use customer master'}</div>
+        <div class="value">{'✓ Loaded' if po.get('customer_defaults') else '— P21 will use customer master'}</div>
       </div>
     </div>
   </div>
