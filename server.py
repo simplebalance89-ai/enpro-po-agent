@@ -177,6 +177,217 @@ async def dashboard():
         return f.read()
 
 
+@app.get("/test-drive", response_class=HTMLResponse)
+async def test_drive():
+    """Interactive test-drive page — upload a PO and see the P21 payload instantly."""
+    html = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnPro PO Agent — Test Drive</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; min-height: 100vh; padding: 40px 20px; }
+.container { max-width: 900px; margin: 0 auto; }
+.top { text-align: center; margin-bottom: 40px; }
+.top h1 { font-size: 28px; color: #4ade80; margin-bottom: 8px; }
+.top p { color: #64748b; font-size: 15px; }
+.drop-zone { border: 2px dashed #3b82f6; border-radius: 12px; padding: 50px 30px; text-align: center; background: #1a1d27; cursor: pointer; transition: all 0.2s; margin-bottom: 30px; }
+.drop-zone:hover { border-color: #60a5fa; background: #1e2130; }
+.drop-zone.dragover { border-color: #4ade80; background: #0d3320; }
+.drop-zone .icon { font-size: 48px; margin-bottom: 12px; }
+.drop-zone h3 { font-size: 18px; color: #fff; margin-bottom: 6px; }
+.drop-zone p { font-size: 13px; color: #64748b; }
+#fileInput { display: none; }
+.source-select { display: flex; justify-content: center; gap: 12px; margin-bottom: 30px; }
+.source-btn { padding: 8px 20px; border-radius: 6px; border: 1px solid #2a2d3a; background: #1a1d27; color: #64748b; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.15s; }
+.source-btn.active { border-color: #3b82f6; color: #3b82f6; background: #1e2a4a; }
+.source-btn:hover:not(.active) { color: #e0e0e0; }
+.flow { display: none; margin-bottom: 30px; }
+.flow.visible { display: block; }
+.flow-step { display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; margin-bottom: 10px; }
+.flow-step .num { width: 28px; height: 28px; border-radius: 50%; background: #3b82f6; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.flow-step.done .num { background: #4ade80; }
+.flow-step.done { border-color: #166534; }
+.flow-step .text { font-size: 14px; }
+.flow-step .text strong { color: #fff; }
+.flow-step .text .detail { color: #64748b; font-size: 12px; margin-top: 2px; }
+.result { display: none; background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 12px; padding: 24px; }
+.result.visible { display: block; }
+.result h2 { font-size: 18px; color: #4ade80; margin-bottom: 16px; }
+.score-circle { width: 100px; height: 100px; border-radius: 50%; border: 3px solid #4ade80; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0 auto 20px; }
+.score-value { font-size: 28px; font-weight: 700; color: #4ade80; }
+.score-label { font-size: 10px; text-transform: uppercase; color: #64748b; letter-spacing: 1px; }
+.meta-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+.meta-item { background: #141620; border-radius: 6px; padding: 10px 14px; }
+.meta-item .label { font-size: 10px; text-transform: uppercase; color: #475569; letter-spacing: 0.5px; }
+.meta-item .value { font-size: 16px; font-weight: 600; color: #fff; margin-top: 2px; }
+.payload-box { background: #0a0c14; border: 1px solid #2a2d3a; border-radius: 6px; padding: 14px; font-family: 'SF Mono', monospace; font-size: 11px; color: #a0a0a0; overflow-x: auto; white-space: pre-wrap; word-break: break-word; max-height: 350px; overflow-y: auto; }
+.btn { display: inline-block; background: #3b82f6; color: #fff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 13px; margin-top: 16px; cursor: pointer; border: none; }
+.btn:hover { background: #2563eb; }
+.btn-green { background: #059669; }
+.btn-green:hover { background: #047857; }
+.error { background: #3b1111; border: 1px solid #7f1d1d; color: #f87171; padding: 14px 18px; border-radius: 8px; margin-bottom: 16px; display: none; }
+.error.visible { display: block; }
+.loading { text-align: center; padding: 40px; color: #64748b; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="top">
+    <h1>🚀 PO Agent Test Drive</h1>
+    <p>Upload a PO file. Watch it parse, match, and build a P21 payload in seconds.</p>
+  </div>
+
+  <div class="source-select">
+    <button class="source-btn active" data-source="ariba" onclick="setSource('ariba')">Ariba</button>
+    <button class="source-btn" data-source="coupa" onclick="setSource('coupa')">Coupa</button>
+    <button class="source-btn" data-source="direct" onclick="setSource('direct')">Email / Direct</button>
+  </div>
+
+  <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <div class="icon">📄</div>
+    <h3>Drop a PO file here or click to upload</h3>
+    <p>Supports PDF, XML (cXML), and CSV formats</p>
+    <input type="file" id="fileInput" accept=".xml,.pdf,.csv" onchange="handleFile(event)">
+  </div>
+
+  <div class="error" id="errorBox"></div>
+
+  <div class="flow" id="flow">
+    <div class="flow-step" id="step1"><div class="num">1</div><div class="text"><strong>Uploading file...</strong></div></div>
+    <div class="flow-step" id="step2"><div class="num">2</div><div class="text"><strong>Parsing PO...</strong></div></div>
+    <div class="flow-step" id="step3"><div class="num">3</div><div class="text"><strong>Matching customer against crosswalk...</strong></div></div>
+    <div class="flow-step" id="step4"><div class="num">4</div><div class="text"><strong>Matching items against P21 item master...</strong></div></div>
+    <div class="flow-step" id="step5"><div class="num">5</div><div class="text"><strong>Building P21 Transaction API payload...</strong></div></div>
+  </div>
+
+  <div class="result" id="result">
+    <h2>✓ P21 Payload Ready</h2>
+    <div class="score-circle">
+      <div class="score-value" id="scoreVal">—</div>
+      <div class="score-label">P21 Ready</div>
+    </div>
+    <div class="meta-grid" id="metaGrid"></div>
+    <div class="payload-box" id="payloadBox"></div>
+    <div style="text-align:center;">
+      <a class="btn" id="downloadBtn" href="#" download>⬇ Download P21 Payload JSON</a>
+      <button class="btn btn-green" id="micDropBtn" onclick="goMicDrop()" style="margin-left:10px;">🎤 Open Mic Drop</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let currentSource = 'ariba';
+let currentIntakeId = '';
+
+function setSource(src) {
+  currentSource = src;
+  document.querySelectorAll('.source-btn').forEach(b => b.classList.toggle('active', b.dataset.source === src));
+}
+
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('dragover');
+  const files = e.dataTransfer.files;
+  if (files.length) handleFile({ target: { files } });
+});
+
+async function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('errorBox').classList.remove('visible');
+  document.getElementById('result').classList.remove('visible');
+  const flow = document.getElementById('flow');
+  flow.classList.add('visible');
+  for (let i = 1; i <= 5; i++) document.getElementById('step' + i).classList.remove('done');
+
+  try {
+    // Step 1: Upload
+    updateStep(1, 'Uploading file...', file.name);
+    const form = new FormData();
+    form.append('file', file);
+    form.append('source', currentSource);
+    const up = await fetch(API + '/api/v1/intake/upload', { method: 'POST', body: form });
+    const upData = await up.json();
+    if (!up.ok) throw new Error(upData.detail || 'Upload failed');
+    currentIntakeId = upData.intake_id;
+    markDone(1, 'File uploaded', 'Intake ID: ' + currentIntakeId);
+
+    // Step 2: Parse
+    updateStep(2, 'Parsing PO...', 'Extracting header, lines, dates, quantities');
+    await sleep(400);
+    const po = await fetch(API + '/api/v1/review/po/' + currentIntakeId).then(r => r.json());
+    markDone(2, 'PO parsed', 'PO #' + (po.header?.po_no || 'N/A') + ' | ' + (po.lines?.length || 0) + ' lines');
+
+    // Step 3: Customer match
+    updateStep(3, 'Matching customer...', 'Ship-to name + zip against 4,880 crosswalk entries');
+    await sleep(400);
+    markDone(3, 'Customer matched', (po.customer_match?.name || 'N/A') + ' (score: ' + (po.customer_match?.score || 0).toFixed(2) + ')');
+
+    // Step 4: Item match
+    updateStep(4, 'Matching items...', 'Customer part numbers against P21 item master');
+    await sleep(400);
+    const matchedItems = (po.lines || []).filter(l => l.item_id_p21).length;
+    markDone(4, 'Items matched', matchedItems + '/' + (po.lines?.length || 0) + ' lines resolved to P21 items');
+
+    // Step 5: Build payload
+    updateStep(5, 'Building P21 payload...', 'Transaction API v2 format');
+    const val = await fetch(API + '/api/v1/p21/validate/' + currentIntakeId, { method: 'POST', headers: {'Content-Type':'application/json'} }).then(r => r.json());
+    markDone(5, 'Payload built', val.valid ? 'Valid — ready for P21' : 'Validation issues found');
+
+    // Show result
+    showResult(val, po);
+  } catch (err) {
+    document.getElementById('errorBox').textContent = 'Error: ' + err.message;
+    document.getElementById('errorBox').classList.add('visible');
+    flow.classList.remove('visible');
+  }
+}
+
+function updateStep(n, title, detail) {
+  const step = document.getElementById('step' + n);
+  step.querySelector('.text strong').textContent = title;
+  step.querySelector('.text .detail')?.remove();
+  if (detail) {
+    const d = document.createElement('div'); d.className = 'detail'; d.textContent = detail;
+    step.querySelector('.text').appendChild(d);
+  }
+}
+
+function markDone(n, title, detail) {
+  updateStep(n, '✓ ' + title, detail);
+  document.getElementById('step' + n).classList.add('done');
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function showResult(val, po) {
+  document.getElementById('scoreVal').textContent = Math.round((val.p21_readiness_score || 0) * 100) + '%';
+  document.getElementById('metaGrid').innerHTML = `
+    <div class="meta-item"><div class="label">PO Number</div><div class="value">${po.header?.po_no || 'N/A'}</div></div>
+    <div class="meta-item"><div class="label">Customer</div><div class="value">${po.customer_match?.name || 'N/A'}</div></div>
+    <div class="meta-item"><div class="label">Line Items</div><div class="value">${po.lines?.length || 0}</div></div>
+    <div class="meta-item"><div class="label">Validation</div><div class="value" style="color:${val.valid?'#4ade80':'#f87171'}">${val.valid?'PASSED':'REVIEW'}</div></div>
+  `;
+  document.getElementById('payloadBox').textContent = JSON.stringify(val.payload, null, 2);
+  document.getElementById('downloadBtn').href = API + '/api/v1/p21/payload/' + currentIntakeId + '/download';
+  document.getElementById('result').classList.add('visible');
+}
+
+function goMicDrop() {
+  window.open('/micdrop', '_blank');
+}
+</script>
+</body>
+</html>'''
+    return HTMLResponse(html)
+
+
 @app.get("/micdrop", response_class=HTMLResponse)
 async def micdrop():
     """Mic drop page — proves the P21 payload is structurally correct and ready.
