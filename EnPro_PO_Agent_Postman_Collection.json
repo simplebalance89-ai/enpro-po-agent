@@ -1,0 +1,217 @@
+{
+  "info": {
+    "_postman_id": "enpro-po-agent-v1",
+    "name": "EnPro PO Agent - P21 Payload Validation",
+    "description": "Postman collection for EnPro PO Agent. Validates that generated payloads conform to P21 Transaction API v2 schema requirements.\n\n**Usage:**\n1. Import this collection into Postman\n2. Set `baseUrl` environment variable to your Render URL\n3. Run 'Validate P21 Payload' to verify a PO would be accepted by P21\n4. Run 'Submit to P21' to actually create the Sales Order (requires P21 credentials)\n\n**Mic Drop:** The 'Validate P21 Payload' endpoint returns `valid: true` and a `p21_readiness_score` — proving the payload aligns with P21's Transaction API.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 - Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status is healthy', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql('healthy');",
+              "    pm.expect(jsonData.version).to.exist;",
+              "});",
+              "pm.test('P21 API status reported', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.services.p21_api).to.exist;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Get PO for Validation",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/review/queue",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "review", "queue"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Queue returns POs', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.pos).to.be.an('array');",
+              "    if (jsonData.pos.length > 0) {",
+              "        pm.environment.set('intakeId', jsonData.pos[0].intake_id);",
+              "        pm.environment.set('poNo', jsonData.pos[0].po_no);",
+              "    }",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Validate P21 Payload (Mic Drop)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": ""
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/p21/validate/{{intakeId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "p21", "validate", "{{intakeId}}"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('P21 payload is VALID', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.valid).to.eql(true, jsonData.message || 'Payload invalid');",
+              "});",
+              "pm.test('P21 readiness score >= 0.85', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.p21_readiness_score).to.be.at.least(0.85);",
+              "});",
+              "pm.test('Payload has required P21 fields', function () {",
+              "    var jsonData = pm.response.json();",
+              "    var payload = jsonData.payload;",
+              "    pm.expect(payload.Name).to.eql('Order');",
+              "    pm.expect(payload.Transactions).to.be.an('array').that.is.not.empty;",
+              "    var txn = payload.Transactions[0];",
+              "    pm.expect(txn.Status).to.eql('New');",
+              "    var header = txn.DataElements.find(e => e.Name === 'TABPAGE_1.order');",
+              "    pm.expect(header).to.exist;",
+              "    var edits = header.Rows[0].Edits;",
+              "    var customerId = edits.find(e => e.Name === 'customer_id');",
+              "    var poNo = edits.find(e => e.Name === 'po_no');",
+              "    pm.expect(customerId).to.exist;",
+              "    pm.expect(poNo).to.exist;",
+              "    var items = txn.DataElements.find(e => e.Name === 'TP_ITEMS.items');",
+              "    pm.expect(items.Rows).to.be.an('array').that.is.not.empty;",
+              "});",
+              "pm.test('Customer defaults populated if available', function () {",
+              "    var jsonData = pm.response.json();",
+              "    var payload = jsonData.payload;",
+              "    var txn = payload.Transactions[0];",
+              "    var header = txn.DataElements.find(e => e.Name === 'TABPAGE_1.order');",
+              "    var edits = header.Rows[0].Edits;",
+              "    var hasCarrier = edits.some(e => e.Name === 'carrier_id' && e.Value);",
+              "    var hasShipTo = edits.some(e => e.Name === 'ship_to_id' && e.Value);",
+              "    var hasTerms = edits.some(e => e.Name === 'terms_id' && e.Value);",
+              "    pm.expect(hasCarrier || hasShipTo || hasTerms).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Download P21 Payload JSON",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/p21/payload/{{intakeId}}/download",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "p21", "payload", "{{intakeId}}", "download"]
+        }
+      }
+    },
+    {
+      "name": "05 - Submit to P21 (Requires Credentials)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"reviewer\": \"Andrew\", \"notes\": \"Auto-submitted from PO Agent\"}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/p21/submit/{{intakeId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "p21", "submit", "{{intakeId}}"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('P21 SO created successfully', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql('submitted');",
+              "    pm.expect(jsonData.p21_so_number).to.exist;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Bulk Approve All Greens",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/review/bulk-approve",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "review", "bulk-approve"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Bulk approve executed', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.approved_count).to.be.at.least(0);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    }
+  ]
+}
