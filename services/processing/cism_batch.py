@@ -14,7 +14,7 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-BATCH_DIR = os.environ.get("CISM_BATCH_DIR", "/app/data/cism_batch")
+BATCH_DIR = os.environ.get("CISM_BATCH_DIR", "./data/cism_batch")
 BATCH_HEADER_FILE = "batch_orderquoteheader.csv"
 BATCH_LINES_FILE = "batch_orderquoteline.csv"
 

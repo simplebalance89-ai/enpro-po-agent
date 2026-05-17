@@ -1780,6 +1780,87 @@ async def _approve_po(intake_id: str, reviewer: str = "bulk", notes: str = "") -
         except Exception as e:
             logger.error(f"Learning loop error: {e}")
 
+    # -- CISM SO Generation ---------------------------------------------
+    cism_result = None
+    try:
+        from services.processing.cism_so_generator import generate_cism_so
+        cism_result = generate_cism_so(
+            p21_customer_id=cust.get("p21_id", ""),
+            p21_customer_name=cust.get("name", ""),
+            p21_ship_to_id=hdr.get("ship_to_id_p21", ""),
+            po_no=hdr.get("po_no", ""),
+            order_date=hdr.get("order_date", ""),
+            requested_date=hdr.get("order_date", ""),
+            ship2_name=hdr.get("ship2_name", ""),
+            ship2_add1=hdr.get("ship2_add1", ""),
+            ship2_add2=hdr.get("ship2_add2", ""),
+            ship2_city=hdr.get("ship2_city", ""),
+            ship2_state=hdr.get("ship2_state", ""),
+            ship2_zip=hdr.get("ship2_zip", ""),
+            ship2_country=hdr.get("ship2_country", "US"),
+            ship2_email=hdr.get("ship2_email", ""),
+            ship2_phone=hdr.get("ship2_phone", ""),
+            contact_id=hdr.get("contact_id", ""),
+            contact_name=hdr.get("buyer", ""),
+            taker=hdr.get("taker", "") or settings.p21_default_taker,
+            terms=hdr.get("terms", ""),
+            carrier_id=hdr.get("carrier_id", ""),
+            carrier_name=hdr.get("carrier_name", ""),
+            delivery_instructions=hdr.get("comments", ""),
+            approved="Y",
+            class_1=hdr.get("class_1", ""),
+            class_2=hdr.get("class_2", ""),
+            source_id=hdr.get("source_id", ""),
+            lines=[{
+                "item_id": l.get("item_id_p21", l.get("supplier_part_id", "")),
+                "qty_ordered": l.get("qty_ordered", 0),
+                "unit_of_measure": l.get("unit_of_measure", "EA"),
+                "unit_price": l.get("unit_price", 0),
+                "item_description": l.get("item_description", ""),
+                "product_group": l.get("product_group", ""),
+                "supplier_id": l.get("supplier_id", ""),
+                "disposition": l.get("disposition", "B"),
+                "required_date": l.get("required_date", ""),
+            } for l in po.get("lines", [])],
+            output_dir=settings.cism_so_output_dir,
+        )
+        logger.info("CISM SO generated for %s: %s", intake_id, cism_result.get("import_set_no"))
+    except Exception as e:
+        logger.error("CISM generation error for %s: %s", intake_id, e)
+
+    # -- CISM Batch Accumulation ----------------------------------------
+    if cism_result:
+        try:
+            from services.processing.cism_batch import add_to_batch
+            po["cism"] = cism_result
+            add_to_batch(po)
+        except Exception as e:
+            logger.error("CISM batch error for %s: %s", intake_id, e)
+
+    # -- P21 Payload Storage --------------------------------------------
+    p21_payload = None
+    try:
+        from services.processing.p21_api_client import build_p21_payload
+        cust_id = cust.get("p21_id", "") or hdr.get("customer_id_p21", "")
+        try:
+            engine = _get_customer_engine()
+            po["customer_defaults"] = engine.get_customer_defaults(cust_id) if cust_id else {}
+        except Exception:
+            po["customer_defaults"] = {}
+        p21_payload = build_p21_payload(po)
+        logger.info("P21 payload built for %s", intake_id)
+    except Exception as e:
+        logger.error("P21 payload build error for %s: %s", intake_id, e)
+
+    # Persist CISM + payload to PO record
+    update_payload = {}
+    if cism_result:
+        update_payload["cism"] = cism_result
+    if p21_payload:
+        update_payload["p21_payload"] = p21_payload
+    if update_payload:
+        local_store.update_po(intake_id, update_payload)
+
     # -- P21 Live API Submit (optional) ---------------------------------
     p21_result = None
     if settings.p21_auto_submit_on_approve and settings.p21_base_url:
@@ -1814,7 +1895,8 @@ async def _approve_po(intake_id: str, reviewer: str = "bulk", notes: str = "") -
             finally:
                 await client.close()
 
-    pv = local_store.get_po(intake_id).get("payload_validation", {})
+    _po = local_store.get_po(intake_id)
+    pv = _po.get("payload_validation", {})
     resp = {
         "status": "approved",
         "intake_id": intake_id,
@@ -1822,6 +1904,8 @@ async def _approve_po(intake_id: str, reviewer: str = "bulk", notes: str = "") -
             "status": pv.get("status", "unknown"),
             "errors": pv.get("errors", []),
         },
+        "cism": _po.get("cism") if _po else None,
+        "p21_payload_ready": bool(_po.get("p21_payload")) if _po else False,
     }
     if p21_result:
         resp["p21_submit"] = {

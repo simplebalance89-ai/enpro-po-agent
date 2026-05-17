@@ -203,11 +203,11 @@ details.help-section[open] > summary .arrow { transform:rotate(90deg); }
   <div class="tab-group">
     <span class="tab-group-label">📤 Export</span>
     <button class="tab" onclick="showTab('payloads')">P21 Payloads <span class="badge" id="payloadsBadge">0</span></button>
+    <button class="tab" onclick="showTab('batch')">CISM Batch <span class="badge" id="batchBadge">0</span></button>
     <button class="tab admin-only" onclick="showTab('outbound')">Outbound Sync <span class="badge" id="outboundBadge">0</span></button>
   </div>
   <div class="tab-group admin-only">
     <span class="tab-group-label">⚙️ Admin</span>
-    <button class="tab admin-only" onclick="showTab('batch')">CISM Batch <span class="badge" id="batchBadge">0</span></button>
     <button class="tab admin-only" onclick="showTab('crosswalk')">Crosswalk</button>
     <button class="tab admin-only" onclick="showTab('cism')">Schema</button>
     <button class="tab admin-only" onclick="showTab('pipeline')">Pipeline</button>
@@ -1756,7 +1756,7 @@ function applyMode(mode) {
   });
   if (!isAdmin) {
     const active = document.querySelector('.tab-panel.active');
-    const adminPanels = ['panel-batch','panel-crosswalk','panel-cism','panel-pipeline','panel-outbound'];
+    const adminPanels = ['panel-crosswalk','panel-cism','panel-pipeline','panel-outbound'];
     if (active && adminPanels.includes(active.id)) {
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
