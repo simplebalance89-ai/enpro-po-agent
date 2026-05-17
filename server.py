@@ -1307,8 +1307,7 @@ async def _approve_po(intake_id: str, reviewer: str = "bulk", notes: str = "") -
 
     # -- P21 Live API Submit (optional) ---------------------------------
     p21_result = None
-    p21_auto_submit = os.environ.get("P21_AUTO_SUBMIT_ON_APPROVE", "false").lower() in ("true", "1", "yes")
-    if p21_auto_submit and settings.p21_base_url:
+    if settings.p21_auto_submit_on_approve and settings.p21_base_url:
         _approved = local_store.get_po(intake_id)
         v = _run_po_validation(_approved)
         if v["valid"]:

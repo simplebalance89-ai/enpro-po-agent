@@ -75,6 +75,7 @@ class Settings(BaseSettings):
     p21_default_taker: str = "POAGENT"
     p21_default_company_id: str = "1"
     p21_default_location_id: str = "10"
+    p21_auto_submit_on_approve: bool = False  # Set to true to auto-submit approved POs to P21 API
 
     # ── Persistent Storage ──
     # Azure Files mount at /app/data (Container App) or Render disk
