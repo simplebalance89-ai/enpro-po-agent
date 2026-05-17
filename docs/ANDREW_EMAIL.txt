@@ -13,7 +13,9 @@ Customer emails a PO (PDF attachment) to orders@enproinc.com. The agent:
 - Builds a P21 Transaction API v2 payload
 - Operator reviews and clicks Approve → P21 creates the Sales Order
 
-All rule-based. No LLM. No manual data entry.
+All rule-based algorithms. No LLM. No AI agent. No manual data entry.
+
+This is exactly what I told Grant on day one: it's an API that reads emails, runs matching algorithms against our crosswalks, and builds a P21 payload. The design hasn't changed since that meeting. I've built enough APIs to know this is a straightforward integration — not a research project. Let's get it across the finish line.
 
 LIVE RIGHT NOW
 --------------
