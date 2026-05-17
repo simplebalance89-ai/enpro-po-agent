@@ -68,6 +68,12 @@ from services.processing.cism_batch import add_to_batch, get_batch_status, clear
 from services.processing import outbound_store
 from services.processing.outbound_mapper import build_payload as build_outbound_payload
 from services.processing.p21_api_client import P21ApiClient, P21ApiError, P21AuthError, build_p21_payload
+from services.processing.invoice_store import (
+    save_invoice, get_invoice, list_invoices,
+    get_invoices_by_so, get_invoices_by_po, update_invoice,
+)
+from services.processing.p21_invoice_pull import pull_invoices_for_so
+from services.processing.coupa_invoice_builder import build_coupa_invoice_xml
 
 settings = get_settings()
 
@@ -967,6 +973,16 @@ def _run_po_validation(po: dict) -> dict:
 class BatchPayloadRequest(BaseModel):
     intake_ids: list
     approved_only: bool = True
+
+
+class InvoiceSyncRequest(BaseModel):
+    so_numbers: list[str] = []
+    reviewer: str = "system"
+
+
+class InvoiceSendRequest(BaseModel):
+    reviewer: str = "system"
+    notes: str = ""
 
 
 @app.post("/api/v1/p21/payload/batch")
@@ -2596,3 +2612,148 @@ async def get_outbound_history(limit: int = 50):
 async def get_ui_config():
     """Return frontend config. Set ADMIN_PASSPHRASE env var to override the default."""
     return {"admin_passphrase": os.environ.get("ADMIN_PASSPHRASE", "")}
+
+
+# ── Invoice Module (grayed out — disabled by default) ────────────────────────
+
+@app.get("/api/v1/invoices")
+async def list_all_invoices():
+    """List all invoices pulled from P21."""
+    invoices = list_invoices()
+    return {
+        "invoices": invoices,
+        "count": len(invoices),
+        "invoice_module_enabled": settings.invoice_module_enabled,
+    }
+
+
+@app.post("/api/v1/invoices/sync")
+async def sync_invoices_from_p21(req: InvoiceSyncRequest, _auth=Depends(_require_api_key)):
+    """Pull invoices from P21 by SO number. Grayed out — returns 503 unless enabled."""
+    if not settings.invoice_module_enabled:
+        raise HTTPException(503, "Invoice module is disabled — contact admin to enable")
+    if not settings.p21_sql_server:
+        raise HTTPException(503, "P21 SQL not configured — cannot pull invoices")
+
+    synced = 0
+    errors = []
+    all_invoices = []
+
+    for so_number in req.so_numbers:
+        try:
+            invs = pull_invoices_for_so(
+                so_number=so_number,
+                sql_server=settings.p21_sql_server,
+                database=settings.p21_sql_database,
+                uid=settings.p21_sql_uid,
+                pwd=settings.p21_sql_pwd,
+                driver=settings.p21_sql_driver,
+            )
+            for inv in invs:
+                inv_id = inv.get("invoice_id") or inv.get("invoice_no", f"INV_{so_number}")
+                save_invoice(inv_id, inv)
+                synced += 1
+                all_invoices.append(inv)
+        except Exception as e:
+            logger.error(f"Invoice sync failed for SO {so_number}: {e}")
+            errors.append({"so_number": so_number, "error": str(e)})
+
+    return {
+        "synced": synced,
+        "so_numbers": req.so_numbers,
+        "invoices": all_invoices,
+        "errors": errors,
+    }
+
+
+@app.get("/api/v1/invoices/{invoice_id}")
+async def get_invoice_detail(invoice_id: str):
+    """Get a single invoice detail."""
+    inv = get_invoice(invoice_id)
+    if not inv:
+        raise HTTPException(404, f"Invoice {invoice_id} not found")
+    return inv
+
+
+@app.post("/api/v1/invoices/{invoice_id}/build-coupa")
+async def build_coupa_payload(invoice_id: str, _auth=Depends(_require_api_key)):
+    """Build Coupa cXML payload for an invoice. Returns the XML string."""
+    if not settings.invoice_module_enabled:
+        raise HTTPException(503, "Invoice module is disabled — contact admin to enable")
+
+    invoice = get_invoice(invoice_id)
+    if not invoice:
+        raise HTTPException(404, f"Invoice {invoice_id} not found")
+
+    po_no = invoice.get("po_no", "")
+    po_data = local_store.get_po(po_no) if po_no else None
+
+    xml = build_coupa_invoice_xml(invoice, po_data)
+    update_invoice(invoice_id, {"coupa_payload": xml, "status": "ready_to_send"})
+
+    return {
+        "invoice_id": invoice_id,
+        "coupa_xml": xml,
+        "po_no": po_no,
+        "so_number": invoice.get("so_number", ""),
+    }
+
+
+@app.post("/api/v1/invoices/{invoice_id}/send-coupa")
+async def send_invoice_to_coupa(invoice_id: str, req: InvoiceSendRequest, _auth=Depends(_require_api_key)):
+    """Send invoice cXML to Coupa. Grayed out — returns 503 unless enabled."""
+    if not settings.invoice_module_enabled:
+        raise HTTPException(503, "Invoice module is disabled — contact admin to enable")
+
+    invoice = get_invoice(invoice_id)
+    if not invoice:
+        raise HTTPException(404, f"Invoice {invoice_id} not found")
+
+    # Auto-build if not present
+    xml = invoice.get("coupa_payload", "")
+    if not xml:
+        po_no = invoice.get("po_no", "")
+        po_data = local_store.get_po(po_no) if po_no else None
+        xml = build_coupa_invoice_xml(invoice, po_data)
+        update_invoice(invoice_id, {"coupa_payload": xml})
+
+    # Mock mode if endpoint not configured
+    if not settings.coupa_invoice_endpoint:
+        return {
+            "status": "ready_to_send",
+            "invoice_id": invoice_id,
+            "mode": "mock",
+            "message": "Coupa endpoint not configured — payload is ready but not sent",
+        }
+
+    import httpx
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                settings.coupa_invoice_endpoint,
+                content=xml,
+                headers={
+                    "Content-Type": "text/xml",
+                    "Authorization": f"Bearer {settings.coupa_invoice_api_key}",
+                },
+                timeout=60.0,
+            )
+        resp.raise_for_status()
+        update_invoice(invoice_id, {
+            "status": "sent_to_coupa",
+            "sent_at": datetime.utcnow().isoformat(),
+            "coupa_response": resp.text,
+        })
+        return {
+            "status": "sent_to_coupa",
+            "invoice_id": invoice_id,
+            "coupa_response_status": resp.status_code,
+            "mode": "live",
+        }
+    except Exception as e:
+        logger.error(f"Coupa invoice send failed for {invoice_id}: {e}")
+        update_invoice(invoice_id, {
+            "status": "failed",
+            "last_error": str(e),
+        })
+        raise HTTPException(502, detail={"message": "Failed to send invoice to Coupa", "detail": str(e)})

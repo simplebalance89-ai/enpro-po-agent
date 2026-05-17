@@ -77,6 +77,11 @@ class Settings(BaseSettings):
     p21_default_location_id: str = "10"
     p21_auto_submit_on_approve: bool = False  # Set to true to auto-submit approved POs to P21 API
 
+    # ── Invoice module (future — grayed out in UI) ──
+    invoice_module_enabled: bool = False
+    coupa_invoice_endpoint: str = ""
+    coupa_invoice_api_key: str = ""
+
     # ── Persistent Storage ──
     # Azure Files mount at /app/data (Container App) or Render disk
     # Bicep injects: CROSSWALK_DIR, CISM_OUTPUT_DIR, CISM_SO_OUTPUT_DIR
