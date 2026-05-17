@@ -71,6 +71,12 @@ from services.processing.p21_api_client import P21ApiClient, P21ApiError, P21Aut
 
 settings = get_settings()
 
+logging.basicConfig(
+    level=logging.DEBUG if settings.debug else logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 _APP_API_KEY = os.environ.get("APP_API_KEY", "")
 if not _APP_API_KEY and settings.environment == "production":
     logger.warning("APP_API_KEY is not set — all mutating routes are UNPROTECTED in production!")
@@ -79,13 +85,6 @@ if not _APP_API_KEY and settings.environment == "production":
 async def _require_api_key(x_api_key: Optional[str] = Header(default=None)):
     if _APP_API_KEY and x_api_key != _APP_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
-
-
-logging.basicConfig(
-    level=logging.DEBUG if settings.debug else logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
-logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Ariba/Coupa PO Automation Agent",
