@@ -553,6 +553,7 @@ function selectPO(id) {
         `<button class="btn btn-green" ${approveDisabled} onclick="${eligible ? `approvePO('${po.intake_id}')` : ''}" style="padding:6px 14px;">Approve</button>` +
         `<button class="btn btn-red" onclick="rejectPO('${po.intake_id}')" style="padding:6px 14px;">Reject</button>` +
         `<a class="btn btn-gray" href="${API}/api/v1/p21/payload/${po.intake_id}/download" download style="padding:6px 14px;text-decoration:none;">Download P21 Payload</a>` +
+        (po.review_status === 'approved' ? `<button class="btn btn-green" onclick="submitP21Single('${po.intake_id}')" style="padding:6px 14px;background:#059669;">Submit to P21</button>` : '') +
         (missingReason && !eligible ? `<span style="color:#f87171;font-size:11px;">⚠ ${missingReason}</span>` : '') +
       `</div>` +
     `</div>` +
@@ -565,6 +566,7 @@ function selectPO(id) {
         `<div class="meta-box"><div class="lbl">Match</div><div class="val">${h.customer_match_method || '-'} (${(h.customer_match_score||0).toFixed?.(2) || '0'})</div></div>` +
         `<div class="meta-box"><div class="lbl">Address</div><div class="val">${h.ship2_add1 || ''}, ${h.ship2_city || ''} ${h.ship2_state || ''} ${h.ship2_zip || ''}</div></div>` +
         `<div class="meta-box"><div class="lbl">Source</div><div class="val">${po.source || '-'}</div></div>` +
+        `<div class="meta-box"><div class="lbl">P21 SO #</div><div class="val" style="color:${po.p21_so_number?'#4ade80':'#94a3b8'};">${po.p21_so_number || 'Not submitted'}</div></div>` +
         `<div class="meta-box"><div class="lbl">Received</div><div class="val">${po.received ? new Date(po.received).toLocaleString() : '-'}</div></div>` +
       `</div>` +
       `<h3 style="margin:16px 0 8px;">Line Items (${lines.length})</h3>` +
@@ -618,6 +620,25 @@ async function rejectPO(id) {
     loadQueue(currentFilter); loadStats();
     selectedId = null;
     document.getElementById('detailPanel').innerHTML = '<div class="empty">Select a PO from the queue to review</div>';
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function submitP21Single(id) {
+  const reviewer = prompt('Submitter name:', 'Brittany');
+  if (!reviewer) return;
+  try {
+    const resp = await fetch(`${API}/api/v1/p21/submit/${id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({reviewer, notes:''}) });
+    const data = await resp.json();
+    if (!resp.ok) {
+      alert('P21 submit failed: ' + (data.detail?.message || data.detail || JSON.stringify(data)));
+      return;
+    }
+    if (data.p21_so_number) {
+      alert(`P21 Sales Order created! SO #${data.p21_so_number}`);
+    } else {
+      alert('P21 submit completed but no SO number returned. Check result: ' + JSON.stringify(data.p21_result));
+    }
+    loadQueue(currentFilter); loadProcessed(); loadPayloads();
   } catch(e) { alert('Error: ' + e.message); }
 }
 
@@ -929,7 +950,7 @@ async function loadProcessed() {
     document.getElementById('procBadge').textContent = approved.length;
     if (approved.length) {
       procEmpty.style.display='none'; procTbl.style.display='table';
-      procTbl.innerHTML = '<tr><th>PO #</th><th>Customer</th><th>Source</th><th>Conf</th><th>Lines</th><th>Reviewed</th><th>CISM Set</th><th>Download</th></tr>' +
+      procTbl.innerHTML = '<tr><th>PO #</th><th>Customer</th><th>Source</th><th>Conf</th><th>Lines</th><th>Reviewed</th><th>P21 SO #</th><th>CISM Set</th><th>Actions</th></tr>' +
         approved.map(r => `<tr>
           <td style="font-weight:600;">${r.po_number||''}</td>
           <td>${r.customer_p21||''} <span style="color:#475569;font-size:10px;">(${r.customer_id_p21||''})</span></td>
@@ -937,8 +958,9 @@ async function loadProcessed() {
           <td><span class="badge-conf ${r.confidence}">${(r.confidence||'').toUpperCase()}</span></td>
           <td>${r.lines_count||0}</td>
           <td>${r.reviewed_by||'auto'} ${r.reviewed_at?(new Date(r.reviewed_at)).toLocaleDateString():''}</td>
+          <td style="color:${r.p21_so_number?'#4ade80':'#94a3b8'};font-weight:600;font-size:12px;">${r.p21_so_number||'—'}</td>
           <td style="font-family:monospace;font-size:11px;">${r.import_set_no||'-'}</td>
-          <td>${r.import_set_no ? `<a href="${API}/api/v1/cism/download/${r.intake_id}/header" class="btn btn-gray" style="padding:3px 8px;font-size:11px;">Header</a> <a href="${API}/api/v1/cism/download/${r.intake_id}/lines" class="btn btn-gray" style="padding:3px 8px;font-size:11px;">Lines</a>` : '-'} <a href="${API}/api/v1/p21/payload/${r.intake_id}/download" class="btn btn-gray" style="padding:3px 8px;font-size:11px;" download>P21 JSON</a></td>
+          <td style="white-space:nowrap;">${r.import_set_no ? `<a href="${API}/api/v1/cism/download/${r.intake_id}/header" class="btn btn-gray" style="padding:3px 8px;font-size:11px;">HDR</a> <a href="${API}/api/v1/cism/download/${r.intake_id}/lines" class="btn btn-gray" style="padding:3px 8px;font-size:11px;">LIN</a>` : ''} <a href="${API}/api/v1/p21/payload/${r.intake_id}/download" class="btn btn-gray" style="padding:3px 8px;font-size:11px;" download>JSON</a> ${!r.p21_so_number ? `<button class="btn btn-green" style="padding:3px 8px;font-size:11px;background:#059669;" onclick="submitP21Single('${r.intake_id}')">Submit</button>` : ''}</td>
         </tr>`).join('');
     } else { procEmpty.style.display='block'; procTbl.style.display='none'; }
 
@@ -1100,6 +1122,7 @@ async function loadPayloads() {
       <td style="white-space:nowrap;">
         <button class="btn btn-blue" style="padding:4px 10px;font-size:11px;" onclick="viewPayload('${r.intake_id}','${r.po_no}','${r.filename}')">View JSON</button>
         <a class="btn btn-gray" style="padding:4px 10px;font-size:11px;text-decoration:none;" href="${API}/api/v1/p21/payload/${r.intake_id}/download" download="${r.filename}">Download</a>
+        ${r.review_status==='approved' && !r.p21_so_number ? `<button class="btn btn-green" style="padding:4px 10px;font-size:11px;background:#059669;" onclick="submitP21Single('${r.intake_id}')">Submit</button>` : ''}
       </td>
     </tr>`).join('');
     updateBatchBtn();
@@ -1424,9 +1447,9 @@ async function viewOutboundPayload(outbound_id, po_no) {
 }
 
 // ── View Mode ─────────────────────────────────────────────────────────────────
-// TODO: Set ADMIN_PASSPHRASE env var in Render dashboard to lock admin access.
-const ADMIN_PASSPHRASE_DEFAULT = 'enpro-admin';
-let _adminPassphrase = ADMIN_PASSPHRASE_DEFAULT;
+// Set ADMIN_PASSPHRASE env var server-side to enable admin mode.
+// If not configured, admin tabs are hidden and admin mode is inaccessible.
+let _adminPassphrase = '';  // locked by default — set by server config
 
 (async () => {
   try {

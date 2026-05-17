@@ -66,10 +66,13 @@ from services.processing import local_store
 from services.processing.cism_batch import add_to_batch, get_batch_status, clear_batch
 from services.processing import outbound_store
 from services.processing.outbound_mapper import build_payload as build_outbound_payload
+from services.processing.p21_api_client import P21ApiClient, P21ApiError, P21AuthError
 
 settings = get_settings()
 
 _APP_API_KEY = os.environ.get("APP_API_KEY", "")
+if not _APP_API_KEY and settings.environment == "production":
+    logger.warning("APP_API_KEY is not set — all mutating routes are UNPROTECTED in production!")
 
 
 async def _require_api_key(x_api_key: Optional[str] = Header(default=None)):
@@ -147,11 +150,15 @@ def _parse_csv_po(content: str):
 
 @app.get("/health")
 async def health():
+    p21_ready = bool(settings.p21_base_url and settings.p21_api_username and settings.p21_api_password)
     return HealthResponse(
         status="healthy",
         version=settings.app_version,
         environment=settings.environment,
-        services={"staging_db": "configured" if settings.staging_sql_server else "not configured"},
+        services={
+            "staging_db": "configured" if settings.staging_sql_server else "not configured",
+            "p21_api": "ready" if p21_ready else "not configured",
+        },
     )
 
 
@@ -724,6 +731,7 @@ async def review_approved():
         "cism_header": po.get("cism", {}).get("header_path", "") if po.get("cism") else "",
         "cism_lines": po.get("cism", {}).get("lines_path", "") if po.get("cism") else "",
         "import_set_no": po.get("cism", {}).get("import_set_no", "") if po.get("cism") else "",
+        "p21_so_number": po.get("p21_so_number", ""),
     } for po in all_pos]
 
 
@@ -1086,6 +1094,160 @@ async def generate_p21_payload_from_file(file: UploadFile = File(...)):
     }
 
 
+# ── P21 Live Submit ──────────────────────────────────────────────────────────
+# These endpoints actually call the P21 Transaction API to create Sales Orders.
+# They require P21_BASE_URL, P21_API_USERNAME, and P21_API_PASSWORD to be set.
+
+
+class P21SubmitRequest(BaseModel):
+    reviewer: str = "system"
+    notes: str = ""
+
+
+@app.post("/api/v1/p21/submit/{intake_id}")
+async def submit_p21_single(intake_id: str, req: P21SubmitRequest, _auth=Depends(_require_api_key)):
+    """Submit a single approved PO to P21 via the Transaction API v2.
+    Returns the P21 Sales Order number on success."""
+    if not settings.p21_base_url:
+        raise HTTPException(503, "P21 API not configured — set P21_BASE_URL")
+
+    po = local_store.get_po(intake_id)
+    if not po:
+        raise HTTPException(404, f"PO {intake_id} not found")
+
+    v = _run_po_validation(po)
+    if not v["valid"]:
+        raise HTTPException(422, detail={"message": "PO failed payload validation", "errors": v["errors"]})
+
+    cust_id = po.get("customer_match", {}).get("p21_id", "") or po.get("header", {}).get("customer_id_p21", "")
+    try:
+        engine = _get_customer_engine()
+        po["customer_defaults"] = engine.get_customer_defaults(cust_id) if cust_id else {}
+    except Exception:
+        po["customer_defaults"] = {}
+
+    client = P21ApiClient(
+        base_url=settings.p21_base_url,
+        username=settings.p21_api_username,
+        password=settings.p21_api_password,
+        verify_ssl=settings.p21_verify_ssl,
+    )
+    try:
+        result = await client.create_sales_order(po)
+    except P21AuthError as e:
+        logger.error("P21 auth failed for PO %s: %s", intake_id, e)
+        raise HTTPException(401, detail={"message": "P21 authentication failed", "detail": str(e)})
+    except P21ApiError as e:
+        logger.error("P21 API error for PO %s: %s", intake_id, e)
+        raise HTTPException(502, detail={"message": "P21 API error", "detail": str(e), "response": e.response_body})
+    except Exception as e:
+        logger.error("Unexpected P21 error for PO %s: %s", intake_id, e)
+        raise HTTPException(500, detail={"message": "Unexpected error calling P21", "detail": str(e)})
+    finally:
+        await client.close()
+
+    # Persist SO number back to the PO
+    so_number = result.get("order_no")
+    if so_number:
+        local_store.update_po(intake_id, {
+            "p21_so_number": so_number,
+            "p21_submitted_at": datetime.utcnow().isoformat(),
+            "p21_submit_result": result,
+        })
+
+    return {
+        "status": "submitted",
+        "intake_id": intake_id,
+        "po_no": po.get("header", {}).get("po_no", ""),
+        "p21_so_number": so_number,
+        "p21_result": result,
+    }
+
+
+class P21BatchSubmitRequest(BaseModel):
+    intake_ids: list
+    reviewer: str = "system"
+
+
+@app.post("/api/v1/p21/submit/batch")
+async def submit_p21_batch(req: P21BatchSubmitRequest, _auth=Depends(_require_api_key)):
+    """Submit multiple approved POs to P21 in a single batch Transaction API call."""
+    if not settings.p21_base_url:
+        raise HTTPException(503, "P21 API not configured — set P21_BASE_URL")
+
+    po_list = []
+    skipped = []
+
+    for intake_id in req.intake_ids:
+        po = local_store.get_po(intake_id)
+        if not po:
+            skipped.append({"intake_id": intake_id, "reason": "not found"})
+            continue
+        v = _run_po_validation(po)
+        if not v["valid"]:
+            skipped.append({"intake_id": intake_id, "po_no": po.get("header", {}).get("po_no", ""), "reason": "validation failed", "errors": v["errors"]})
+            continue
+
+        cust_id = po.get("customer_match", {}).get("p21_id", "") or po.get("header", {}).get("customer_id_p21", "")
+        try:
+            engine = _get_customer_engine()
+            po["customer_defaults"] = engine.get_customer_defaults(cust_id) if cust_id else {}
+        except Exception:
+            po["customer_defaults"] = {}
+
+        po_list.append(po)
+
+    if not po_list:
+        raise HTTPException(422, detail={"message": "No valid POs to submit", "skipped": skipped})
+
+    client = P21ApiClient(
+        base_url=settings.p21_base_url,
+        username=settings.p21_api_username,
+        password=settings.p21_api_password,
+        verify_ssl=settings.p21_verify_ssl,
+    )
+    try:
+        results = await client.create_sales_orders_batch(po_list)
+    except P21AuthError as e:
+        logger.error("P21 batch auth failed: %s", e)
+        raise HTTPException(401, detail={"message": "P21 authentication failed", "detail": str(e)})
+    except P21ApiError as e:
+        logger.error("P21 batch API error: %s", e)
+        raise HTTPException(502, detail={"message": "P21 API error", "detail": str(e), "response": e.response_body})
+    except Exception as e:
+        logger.error("Unexpected P21 batch error: %s", e)
+        raise HTTPException(500, detail={"message": "Unexpected error calling P21", "detail": str(e)})
+    finally:
+        await client.close()
+
+    # Persist SO numbers back to each PO
+    for i, po in enumerate(po_list):
+        intake_id = po.get("intake_id") or po.get("_intake_id", "")
+        if not intake_id:
+            continue
+        result = results[i] if i < len(results) else {"status": "Unknown", "order_no": None}
+        so_number = result.get("order_no")
+        update = {
+            "p21_submit_result": result,
+        }
+        if so_number:
+            update["p21_so_number"] = so_number
+            update["p21_submitted_at"] = datetime.utcnow().isoformat()
+        local_store.update_po(intake_id, update)
+
+    succeeded = sum(1 for r in results if r.get("order_no"))
+    failed = len(results) - succeeded
+
+    return {
+        "status": "submitted",
+        "submitted_count": len(po_list),
+        "succeeded": succeeded,
+        "failed": failed,
+        "results": results,
+        "skipped": skipped,
+    }
+
+
 class ApproveRequest(BaseModel):
     reviewer: str = "system"
     notes: str = ""
@@ -1142,8 +1304,43 @@ async def approve_po(intake_id: str, req: ApproveRequest, _auth=Depends(_require
         except Exception as e:
             logger.error(f"Learning loop error: {e}")
 
+    # ── P21 Live API Submit (optional) ──────────────────────────────────
+    p21_result = None
+    p21_auto_submit = os.environ.get("P21_AUTO_SUBMIT_ON_APPROVE", "false").lower() in ("true", "1", "yes")
+    if p21_auto_submit and settings.p21_base_url:
+        _approved = local_store.get_po(intake_id)
+        v = _run_po_validation(_approved)
+        if v["valid"]:
+            try:
+                cust_id = _approved.get("customer_match", {}).get("p21_id", "") or _approved.get("header", {}).get("customer_id_p21", "")
+                engine = _get_customer_engine()
+                _approved["customer_defaults"] = engine.get_customer_defaults(cust_id) if cust_id else {}
+            except Exception:
+                _approved["customer_defaults"] = {}
+
+            client = P21ApiClient(
+                base_url=settings.p21_base_url,
+                username=settings.p21_api_username,
+                password=settings.p21_api_password,
+                verify_ssl=settings.p21_verify_ssl,
+            )
+            try:
+                p21_result = await client.create_sales_order(_approved)
+                so_number = p21_result.get("order_no")
+                if so_number:
+                    local_store.update_po(intake_id, {
+                        "p21_so_number": so_number,
+                        "p21_submitted_at": datetime.utcnow().isoformat(),
+                        "p21_submit_result": p21_result,
+                    })
+            except Exception as e:
+                logger.error("P21 auto-submit failed for PO %s: %s", intake_id, e)
+                p21_result = {"error": str(e), "status": "failed"}
+            finally:
+                await client.close()
+
     pv = local_store.get_po(intake_id).get("payload_validation", {})
-    return {
+    resp = {
         "status": "approved",
         "intake_id": intake_id,
         "payload_validation": {
@@ -1151,6 +1348,13 @@ async def approve_po(intake_id: str, req: ApproveRequest, _auth=Depends(_require
             "errors": pv.get("errors", []),
         },
     }
+    if p21_result:
+        resp["p21_submit"] = {
+            "so_number": p21_result.get("order_no"),
+            "status": p21_result.get("status", "unknown"),
+            "error": p21_result.get("error"),
+        }
+    return resp
 
 
 class RejectRequest(BaseModel):
@@ -1659,6 +1863,18 @@ async def _bootstrap_crosswalks_if_empty():
                 logger.warning(f"  blob sync error: {err}")
     except Exception as e:
         logger.error(f"Startup blob bootstrap failed (non-fatal): {e}")
+
+    # ── Background email polling ──────────────────────────────────────────
+    try:
+        from services.intake.email_poller import EmailPoller, TENANT_ID, CLIENT_ID, CLIENT_SECRET
+        if TENANT_ID and CLIENT_ID and CLIENT_SECRET:
+            logger.info("Graph API credentials found — starting background email poller")
+            poller = EmailPoller()
+            asyncio.create_task(poller.run_continuous())
+        else:
+            logger.info("Graph API credentials not configured — email polling disabled")
+    except Exception as e:
+        logger.error(f"Failed to start email poller (non-fatal): {e}")
 
 
 @app.post("/api/v1/crosswalk/build")

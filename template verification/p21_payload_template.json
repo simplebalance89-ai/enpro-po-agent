@@ -1,0 +1,65 @@
+﻿{
+  "Name": "Order",
+  "UseCodeValues": false,
+  "Transactions": [
+    {
+      "Status": "New",
+      "DataElements": [
+        {
+          "Name": "TABPAGE_1.order",
+          "Type": "Form",
+          "Keys": [],
+          "Rows": [
+            {
+              "Edits": [
+                { "Name": "customer_id", "Value": "<P21_CUSTOMER_ID>" },
+                { "Name": "po_no", "Value": "<CUSTOMER_PO_NUMBER>" },
+                { "Name": "ship_to_id", "Value": "<P21_SHIP_TO_ID>" },
+                { "Name": "order_date", "Value": "<MM/DD/YYYY>" },
+                { "Name": "requested_date", "Value": "<MM/DD/YYYY>" },
+                { "Name": "source_location_id", "Value": "<P21_LOCATION_ID>" },
+                { "Name": "carrier_id", "Value": "<P21_CARRIER_ID>" },
+                { "Name": "approved", "Value": "Y" },
+                { "Name": "company_id", "Value": "<P21_COMPANY_ID>" },
+                { "Name": "contact_id", "Value": "<P21_CONTACT_ID>" },
+                { "Name": "taker", "Value": "POAGENT" },
+                { "Name": "terms_id", "Value": "<P21_TERMS_ID>" },
+                { "Name": "quote", "Value": "OFF" }
+              ],
+              "RelativeDateEdits": []
+            }
+          ]
+        },
+        {
+          "Name": "TP_ITEMS.items",
+          "Type": "List",
+          "Keys": [],
+          "Rows": [
+            {
+              "Edits": [
+                { "Name": "oe_order_item_id", "Value": "<P21_ITEM_ID_1>" },
+                { "Name": "unit_quantity", "Value": "10.000000000" },
+                { "Name": "unit_price", "Value": "185.5000" },
+                { "Name": "source_loc_id", "Value": "<P21_LOCATION_ID>" },
+                { "Name": "line_no", "Value": "1" },
+                { "Name": "required_date", "Value": "<MM/DD/YYYY>" }
+              ],
+              "RelativeDateEdits": []
+            },
+            {
+              "Edits": [
+                { "Name": "oe_order_item_id", "Value": "<P21_ITEM_ID_2>" },
+                { "Name": "unit_quantity", "Value": "5.000000000" },
+                { "Name": "unit_price", "Value": "96.5200" },
+                { "Name": "source_loc_id", "Value": "<P21_LOCATION_ID>" },
+                { "Name": "line_no", "Value": "2" },
+                { "Name": "required_date", "Value": "<MM/DD/YYYY>" }
+              ],
+              "RelativeDateEdits": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
