@@ -178,13 +178,67 @@ async def dashboard():
 
 @app.get("/micdrop", response_class=HTMLResponse)
 async def micdrop():
-    """Mic drop page — proves the P21 payload is structurally correct and ready."""
+    """Mic drop page — proves the P21 payload is structurally correct and ready.
+    Always works: uses a real PO if available, otherwise shows a demo PO."""
     all_pos = local_store.get_all_pos()
     approved = [po for po in all_pos if po.get("review_status") == "approved"]
     po = approved[-1] if approved else (all_pos[-1] if all_pos else None)
 
+    using_demo = False
     if not po:
-        return HTMLResponse("<h1>No POs yet</h1>")
+        using_demo = True
+        # Demo PO — illustrates the full email → parse → match → P21 flow
+        po = {
+            "intake_id": "DEMO_001",
+            "source": "coupa",
+            "review_status": "approved",
+            "approved": True,
+            "header": {
+                "po_no": "4500819454",
+                "order_date": "2026-04-02",
+                "ship2_name": "Stepan Chemical Co",
+                "ship2_add1": "100 W Hunter Ave",
+                "ship2_city": "Maywood",
+                "ship2_state": "NJ",
+                "ship2_zip": "07607",
+                "buyer": "Matt Stolar",
+                "buyer_email": "matt.stolar@stepan.com",
+            },
+            "lines": [
+                {
+                    "line_no": 1,
+                    "supplier_part_id": "CS-P0400/3000",
+                    "item_description": "Buffer Solution / CaliMat pH Buffer 4.00",
+                    "qty_ordered": 31,
+                    "unit_price": 394.03,
+                    "unit_of_measure": "EA",
+                    "item_id_p21": "35030",
+                },
+                {
+                    "line_no": 2,
+                    "supplier_part_id": "CS-P0700/1000",
+                    "item_description": "pH Electrode Maintenance Kit",
+                    "qty_ordered": 31,
+                    "unit_price": 349.22,
+                    "unit_of_measure": "EA",
+                    "item_id_p21": "32353",
+                },
+            ],
+            "customer_match": {
+                "p21_id": "203740",
+                "name": "Stepan Chemical Co",
+                "method": "exact_name_zip",
+                "score": 0.95,
+                "shipto_score": 0.92,
+            },
+            "customer_defaults": {
+                "ship_to_id": "203740-01",
+                "carrier_id": "FEDX",
+                "contact_id": "MATT.S",
+                "terms_id": "NET30",
+                "source_location_id": "10",
+            },
+        }
 
     intake_id = po.get("intake_id", "")
     cust_id = po.get("customer_match", {}).get("p21_id", "") or po.get("header", {}).get("customer_id_p21", "")
@@ -256,6 +310,22 @@ h1 {{ font-size: 32px; color: {green}; margin-bottom: 8px; }}
   <div class="mic-emoji">🎤⬇️</div>
   <h1>This Payload WILL Be Accepted by P21</h1>
   <p class="subtitle">Transaction API v2 — validated, structured, ready to create a Sales Order</p>
+
+  {'<div style="background:#1a2e1a;border:1px solid #166534;border-radius:8px;padding:10px 16px;margin-bottom:20px;display:inline-block;"><span style="color:#86efac;font-size:12px;font-weight:600;">✓ LIVE PO — pulled from your queue</span></div>' if not using_demo else '<div style="background:#332b00;border:1px solid #78350f;border-radius:8px;padding:10px 16px;margin-bottom:20px;display:inline-block;"><span style="color:#fbbf24;font-size:12px;font-weight:600;">📋 DEMO — This is what happens when an email PO arrives</span></div>'}
+
+  <div class="card" style="text-align:center;">
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;font-size:13px;">
+      <span style="background:#1e3a5f;color:#7dd3fc;padding:6px 12px;border-radius:6px;font-weight:600;">📧 Email arrives</span>
+      <span style="color:#475569;">→</span>
+      <span style="background:#3f1e4a;color:#e9d5ff;padding:6px 12px;border-radius:6px;font-weight:600;">📄 PDF parsed</span>
+      <span style="color:#475569;">→</span>
+      <span style="background:#1a2e1a;color:#86efac;padding:6px 12px;border-radius:6px;font-weight:600;">🔍 Customer matched</span>
+      <span style="color:#475569;">→</span>
+      <span style="background:#0d3320;color:#4ade80;padding:6px 12px;border-radius:6px;font-weight:600;">📦 Items matched</span>
+      <span style="color:#475569;">→</span>
+      <span style="background:#1a1d27;color:#fff;padding:6px 12px;border-radius:6px;font-weight:600;border:1px solid #3b82f6;">⚡ P21 Payload built</span>
+    </div>
+  </div>
 
   <div class="score-circle">
     <div class="score-value">{int(score*100)}%</div>
