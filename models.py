@@ -218,3 +218,4 @@ class HealthResponse(BaseModel):
     version: str
     environment: str
     services: dict[str, str]
+    disk: Optional[dict] = None

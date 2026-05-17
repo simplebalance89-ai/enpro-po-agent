@@ -161,11 +161,14 @@ details.help-section[open] > summary .arrow { transform:rotate(90deg); }
     <div class="queue-sidebar">
       <div class="queue-header">
         <h3>Needs Action</h3><div class="queue-subtitle">Select a PO to review and take action</div>
-        <div class="filter-pills">
-          <button class="pill active" onclick="filterQ('all')">All</button>
-          <button class="pill" onclick="filterQ('green')">Green</button>
-          <button class="pill" onclick="filterQ('yellow')">Yellow</button>
-          <button class="pill" onclick="filterQ('red')">Red</button>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="filter-pills">
+            <button class="pill active" onclick="filterQ('all')">All</button>
+            <button class="pill" onclick="filterQ('green')">Green</button>
+            <button class="pill" onclick="filterQ('yellow')">Yellow</button>
+            <button class="pill" onclick="filterQ('red')">Red</button>
+          </div>
+          <button id="bulkApproveBtn" class="btn btn-green" style="padding:3px 10px;font-size:11px;" disabled onclick="openBulkModal()">Approve All Green (0)</button>
         </div>
       </div>
       <div id="poList"><div class="empty" style="padding:30px;">Loading...</div></div>
@@ -392,7 +395,10 @@ details.help-section[open] > summary .arrow { transform:rotate(90deg); }
   <div class="xw-section">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px;">
       <h3 style="margin:0;">Outbound Sync — P21 Invoice Feedback to Ariba/Coupa</h3>
-      <button class="btn btn-gray" style="padding:6px 14px;font-size:12px;" onclick="loadOutbound()">↻ Refresh</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-gray" style="padding:6px 14px;font-size:12px;" onclick="loadOutbound()">↻ Refresh</button>
+        <a class="btn btn-gray" style="padding:6px 14px;font-size:12px;text-decoration:none;" href="${API}/api/v1/outbound/history/download" download>Download History CSV</a>
+      </div>
     </div>
     <p class="desc" style="margin-top:6px;">
       Foundation queue for syncing P21 invoice data back to source procurement systems.
@@ -437,6 +443,19 @@ details.help-section[open] > summary .arrow { transform:rotate(90deg); }
       </div>
     </div>
     <pre id="jsonViewer" style="background:#0f1117;border:1px solid #2a2d3a;border-radius:6px;padding:16px;font-size:12px;line-height:1.6;overflow-x:auto;color:#a5f3fc;white-space:pre-wrap;word-break:break-word;max-height:60vh;overflow-y:auto;"></pre>
+  </div>
+</div>
+
+<!-- BULK APPROVE MODAL -->
+<div id="bulkApproveModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;overflow:auto;padding:24px;">
+  <div style="background:#1a1d27;border:1px solid #2a2d3a;border-radius:10px;max-width:500px;margin:0 auto;padding:24px;">
+    <div style="font-weight:700;font-size:15px;color:#fff;margin-bottom:12px;">Approve All Green POs</div>
+    <div style="color:#94a3b8;font-size:13px;margin-bottom:16px;">The following <span id="bulkCount" style="color:#4ade80;font-weight:600;"></span> POs will be approved:</div>
+    <div id="bulkPoList" style="background:#0f1117;border:1px solid #2a2d3a;border-radius:6px;padding:12px;font-size:12px;color:#e0e0e0;max-height:200px;overflow-y:auto;margin-bottom:16px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-gray" onclick="closeBulkModal()" style="padding:6px 14px;font-size:12px;">Cancel</button>
+      <button class="btn btn-green" onclick="confirmBulkApprove()" style="padding:6px 14px;font-size:12px;">Confirm Approve</button>
+    </div>
   </div>
 </div>
 
@@ -505,6 +524,7 @@ function renderQueue() {
   const el = document.getElementById('poList');
   if (!queue.length) {
     el.innerHTML = '<div class="empty" style="padding:30px;">No POs pending review. Pipeline is fully automated.</div>';
+    updateBulkApproveBtn();
     return;
   }
   const filtered = currentFilter === 'all' ? queue : queue.filter(po => po.confidence === currentFilter);
@@ -517,7 +537,45 @@ function renderQueue() {
     nrRows +
     `<div class="swim-lane-header ready-to-approve"><span>Ready to Approve</span><span class="swim-count">${readyToApprove.length}</span></div>` +
     raRows;
+  updateBulkApproveBtn();
 }
+
+function updateBulkApproveBtn() {
+  const greenPending = queue.filter(po => po.confidence === 'green' && po.status !== 'approved');
+  const btn = document.getElementById('bulkApproveBtn');
+  btn.textContent = `Approve All Green (${greenPending.length})`;
+  btn.disabled = greenPending.length === 0;
+  btn.style.opacity = greenPending.length === 0 ? '0.4' : '1';
+  btn.style.cursor = greenPending.length === 0 ? 'not-allowed' : 'pointer';
+}
+
+function openBulkModal() {
+  const greenPending = queue.filter(po => po.confidence === 'green' && po.status !== 'approved');
+  if (!greenPending.length) return;
+  document.getElementById('bulkCount').textContent = greenPending.length;
+  document.getElementById('bulkPoList').innerHTML = greenPending.map(po => `<div>• ${po.po_number || 'Unknown'}</div>`).join('');
+  document.getElementById('bulkApproveModal').style.display = 'block';
+}
+
+function closeBulkModal() {
+  document.getElementById('bulkApproveModal').style.display = 'none';
+}
+
+async function confirmBulkApprove() {
+  closeBulkModal();
+  try {
+    const resp = await fetch(`${API}/api/v1/review/bulk-approve`, {method:'POST', headers:{'Content-Type':'application/json'}});
+    const data = await resp.json();
+    alert(`Bulk approve complete!\nApproved: ${data.approved_count}\nSkipped: ${data.skipped_count}\nPOs: ${data.po_nos.join(', ') || 'none'}`);
+    loadQueue(currentFilter); loadStats(); loadProcessed(); loadPayloads();
+    selectedId = null;
+    document.getElementById('detailPanel').innerHTML = '<div class="empty">Select a PO from the queue to review</div>';
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+document.getElementById('bulkApproveModal').addEventListener('click', function(e) {
+  if (e.target === this) closeBulkModal();
+});
 
 function selectPO(id) {
   selectedId = id;

@@ -1252,9 +1252,9 @@ class ApproveRequest(BaseModel):
     reviewer: str = "system"
     notes: str = ""
 
-@app.post("/api/v1/review/po/{intake_id}/approve")
-async def approve_po(intake_id: str, req: ApproveRequest, _auth=Depends(_require_api_key)):
-    """Approve a PO — triggers learning loop and submits to P21 (API or CISM fallback)."""
+
+async def _approve_po(intake_id: str, reviewer: str = "bulk", notes: str = "") -> dict:
+    """Shared approve logic used by single and bulk endpoints."""
     po = local_store.get_po(intake_id)
     if not po:
         raise HTTPException(404, f"PO {intake_id} not found")
@@ -1263,8 +1263,9 @@ async def approve_po(intake_id: str, req: ApproveRequest, _auth=Depends(_require
 
     local_store.update_po(intake_id, {
         "review_status": "approved",
-        "reviewed_by": req.reviewer,
-        "reviewer_notes": req.notes,
+        "approved": True,
+        "reviewed_by": reviewer,
+        "reviewer_notes": notes,
         "reviewed_at": datetime.utcnow().isoformat(),
     })
 
@@ -1304,7 +1305,7 @@ async def approve_po(intake_id: str, req: ApproveRequest, _auth=Depends(_require
         except Exception as e:
             logger.error(f"Learning loop error: {e}")
 
-    # ── P21 Live API Submit (optional) ──────────────────────────────────
+    # -- P21 Live API Submit (optional) ---------------------------------
     p21_result = None
     p21_auto_submit = os.environ.get("P21_AUTO_SUBMIT_ON_APPROVE", "false").lower() in ("true", "1", "yes")
     if p21_auto_submit and settings.p21_base_url:
@@ -1355,6 +1356,48 @@ async def approve_po(intake_id: str, req: ApproveRequest, _auth=Depends(_require
             "error": p21_result.get("error"),
         }
     return resp
+
+
+@app.post("/api/v1/review/po/{intake_id}/approve")
+async def approve_po(intake_id: str, req: ApproveRequest, _auth=Depends(_require_api_key)):
+    """Approve a PO -- triggers learning loop and submits to P21 (API or CISM fallback)."""
+    return await _approve_po(intake_id, reviewer=req.reviewer, notes=req.notes)
+
+
+@app.post("/api/v1/review/bulk-approve")
+async def bulk_approve_greens(_auth=Depends(_require_api_key)):
+    """Approve all POs with confidence=green and not yet approved in a single batch."""
+    all_pos = local_store.list_pos()
+    eligible = [
+        po for po in all_pos
+        if po.get("confidence") == "green" and po.get("review_status") != "approved"
+    ]
+
+    approved_count = 0
+    skipped_count = 0
+    po_nos = []
+    errors = []
+
+    for po in eligible:
+        intake_id = po.get("intake_id")
+        po_no = po.get("po_no") or po.get("header", {}).get("po_no", intake_id)
+        try:
+            await _approve_po(intake_id, reviewer="bulk")
+            approved_count += 1
+            po_nos.append(po_no)
+        except HTTPException as e:
+            skipped_count += 1
+            errors.append({"po_no": po_no, "intake_id": intake_id, "error": e.detail})
+        except Exception as e:
+            skipped_count += 1
+            errors.append({"po_no": po_no, "intake_id": intake_id, "error": str(e)})
+
+    return {
+        "approved_count": approved_count,
+        "skipped_count": skipped_count,
+        "po_nos": po_nos,
+        "errors": errors,
+    }
 
 
 class RejectRequest(BaseModel):

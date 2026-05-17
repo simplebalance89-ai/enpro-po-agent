@@ -48,6 +48,30 @@ def _lines_path():
     return os.path.join(BATCH_DIR, BATCH_LINES_FILE)
 
 
+def _atomic_append_csv(target_path: str, fieldnames: list, new_rows: list):
+    """Atomically append rows to a CSV file by writing to a temp file and swapping."""
+    tmp_path = target_path + ".tmp"
+
+    existing_rows = []
+    write_header = True
+    if os.path.exists(target_path) and os.path.getsize(target_path) > 0:
+        with open(target_path, "r", newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            existing_rows = list(reader)
+            write_header = False
+
+    with open(tmp_path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        if write_header:
+            w.writeheader()
+        for row in existing_rows:
+            w.writerow(row)
+        for row in new_rows:
+            w.writerow(row)
+
+    os.replace(tmp_path, target_path)
+
+
 def add_to_batch(po_data: dict):
     """Add an approved PO to the running CISM batch."""
     _ensure_dir()
@@ -65,68 +89,59 @@ def add_to_batch(po_data: dict):
     # Get customer defaults (contact_id, address_id, terms, carrier)
     defaults = po_data.get("customer_defaults", {})
 
-    # Append header row
-    h_path = _header_path()
-    write_header_row = not os.path.exists(h_path) or os.path.getsize(h_path) == 0
-    with open(h_path, "a", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=HEADER_COLUMNS)
-        if write_header_row:
-            w.writeheader()
-        w.writerow({
-            "Import Set No": import_set,
-            "Customer ID": cust.get("p21_id", ""),
-            "Customer Name": cust.get("name", "")[:50],
-            "Company ID": "1",
-            "Sales Location ID": "10",
-            "Customer PO Number": po_data.get("po_no", "")[:50],
-            "Contact ID": defaults.get("default_contact_id", ""),
-            "Contact Name": (header.get("buyer") or cust.get("name", ""))[:50],
-            "Taker": header.get("taker", "") or "SYSTEM",
-            "Job Name": "",
-            "Order Date": _fmt_date(header.get("order_date", "")),
-            "Requested Date": _fmt_date(header.get("order_date", "")),
-            "Quote": "",
-            "Approved": "Y",
-            "Ship To ID": defaults.get("default_address_id", ""),
-            "Ship To Name": header.get("ship2_name", "")[:50],
-            "Ship To Address 1": header.get("ship2_add1", "")[:50],
-            "Ship To Address 2": "",
-            "Ship To City": header.get("ship2_city", "")[:50],
-            "Ship To State": header.get("ship2_state", "")[:50],
-            "Ship To Zip Code": header.get("ship2_zip", "")[:10],
-            "Ship To Country": header.get("ship2_country", "US")[:50],
-            "Packing Basis": "Partial/Order",
-            "Delivery Instructions": (header.get("comments") or "")[:255],
-            "Terms": defaults.get("default_terms", ""),
-            "Carrier ID": defaults.get("default_carrier_id", ""),
-            "Will Call": "N",
-        })
+    # Build header row
+    header_row = {
+        "Import Set No": import_set,
+        "Customer ID": cust.get("p21_id", ""),
+        "Customer Name": cust.get("name", "")[:50],
+        "Company ID": "1",
+        "Sales Location ID": "10",
+        "Customer PO Number": po_data.get("po_no", "")[:50],
+        "Contact ID": defaults.get("default_contact_id", ""),
+        "Contact Name": (header.get("buyer") or cust.get("name", ""))[:50],
+        "Taker": header.get("taker", "") or "SYSTEM",
+        "Job Name": "",
+        "Order Date": _fmt_date(header.get("order_date", "")),
+        "Requested Date": _fmt_date(header.get("order_date", "")),
+        "Quote": "",
+        "Approved": "Y",
+        "Ship To ID": defaults.get("default_address_id", ""),
+        "Ship To Name": header.get("ship2_name", "")[:50],
+        "Ship To Address 1": header.get("ship2_add1", "")[:50],
+        "Ship To Address 2": "",
+        "Ship To City": header.get("ship2_city", "")[:50],
+        "Ship To State": header.get("ship2_state", "")[:50],
+        "Ship To Zip Code": header.get("ship2_zip", "")[:10],
+        "Ship To Country": header.get("ship2_country", "US")[:50],
+        "Packing Basis": "Partial/Order",
+        "Delivery Instructions": (header.get("comments") or "")[:255],
+        "Terms": defaults.get("default_terms", ""),
+        "Carrier ID": defaults.get("default_carrier_id", ""),
+        "Will Call": "N",
+    }
+    _atomic_append_csv(_header_path(), HEADER_COLUMNS, [header_row])
 
-    # Append line rows
-    l_path = _lines_path()
-    write_line_header = not os.path.exists(l_path) or os.path.getsize(l_path) == 0
-    with open(l_path, "a", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=LINE_COLUMNS)
-        if write_line_header:
-            w.writeheader()
-        for i, line in enumerate(lines, 1):
-            w.writerow({
-                "Import Set Number": import_set,
-                "Line No": str(line.get("line_no", i)),
-                "Item ID": (line.get("item_id_p21") or line.get("supplier_part_id", ""))[:40],
-                "Unit Quantity": str(line.get("qty_ordered", 0)),
-                "Unit of Measure": (line.get("unit_of_measure") or "EA")[:8],
-                "Unit Price": f"{float(line.get('unit_price', 0) or 0):.4f}",
-                "Extended Description": (line.get("item_description") or "")[:255],
-                "Source Location ID": "10",
-                "Ship Location ID": "10",
-                "Product Group ID": (line.get("product_group") or "")[:8],
-                "Required Date": "",
-                "Disposition": "B",
-                "Manual Price Override": "Y" if line.get("unit_price") else "N",
-                "Capture Usage": "N",
-                "Item Description": (line.get("item_description") or "")[:40],
-            })
+    # Build line rows
+    line_rows = []
+    for i, line in enumerate(lines, 1):
+        line_rows.append({
+            "Import Set Number": import_set,
+            "Line No": str(line.get("line_no", i)),
+            "Item ID": (line.get("item_id_p21") or line.get("supplier_part_id", ""))[:40],
+            "Unit Quantity": str(line.get("qty_ordered", 0)),
+            "Unit of Measure": (line.get("unit_of_measure") or "EA")[:8],
+            "Unit Price": f"{float(line.get('unit_price', 0) or 0):.4f}",
+            "Extended Description": (line.get("item_description") or "")[:255],
+            "Source Location ID": "10",
+            "Ship Location ID": "10",
+            "Product Group ID": (line.get("product_group") or "")[:8],
+            "Required Date": "",
+            "Disposition": "B",
+            "Manual Price Override": "Y" if line.get("unit_price") else "N",
+            "Capture Usage": "N",
+            "Item Description": (line.get("item_description") or "")[:40],
+        })
+    _atomic_append_csv(_lines_path(), LINE_COLUMNS, line_rows)
 
     logger.info(f"Added to CISM batch: PO {po_data.get('po_no')} ({import_set}), {len(lines)} lines")
 
