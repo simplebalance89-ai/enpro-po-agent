@@ -337,7 +337,11 @@ class P21ApiClient:
             first_line_date = self._to_p21_date(lines[0].get("required_date", ""))
         requested_date = first_line_date or order_date
 
-        ship_to_id = defaults.get("ship_to_id") or header.get("ship_to_id_p21", "")
+        # customer_defaults.csv uses "default_*" prefix; normalize to plain names
+        ship_to_id = defaults.get("ship_to_id") or defaults.get("default_address_id") or header.get("ship_to_id_p21", "")
+        carrier_id = defaults.get("carrier_id") or defaults.get("default_carrier_id", "")
+        contact_id = defaults.get("contact_id") or defaults.get("default_contact_id", "")
+        terms_id = defaults.get("terms") or defaults.get("terms_id") or defaults.get("default_terms", "")
 
         header_edits_raw = [
             {"Name": "customer_id", "Value": str(customer.get("p21_id") or customer.get("p21_customer_id", ""))},
@@ -346,12 +350,12 @@ class P21ApiClient:
             {"Name": "order_date", "Value": order_date},
             {"Name": "requested_date", "Value": requested_date},
             {"Name": "source_location_id", "Value": str(defaults.get("source_location_id", P21_DEFAULT_LOCATION))},
-            {"Name": "carrier_id", "Value": str(defaults.get("carrier_id", ""))},
+            {"Name": "carrier_id", "Value": str(carrier_id)},
             {"Name": "approved", "Value": "Y"},
             {"Name": "company_id", "Value": str(defaults.get("company_id", P21_DEFAULT_COMPANY))},
-            {"Name": "contact_id", "Value": str(defaults.get("contact_id", ""))},
+            {"Name": "contact_id", "Value": str(contact_id)},
             {"Name": "taker", "Value": str(defaults.get("taker", P21_DEFAULT_TAKER))},
-            {"Name": "terms_id", "Value": str(defaults.get("terms", ""))},
+            {"Name": "terms_id", "Value": str(terms_id)},
             {"Name": "quote", "Value": "OFF"},
         ]
         header_edits = [e for e in header_edits_raw if e["Value"] not in ("", None)]
