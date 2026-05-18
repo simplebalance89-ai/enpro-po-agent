@@ -1406,8 +1406,10 @@ async function loadInvoices() {
       <td><span class="badge-valid ${r.status||'pending'}">${(r.status||'pending').toUpperCase()}</span></td>
       <td style="text-align:center;">${r.lines?.length||0}</td>
       <td style="white-space:nowrap;">
-        <button class="btn btn-blue" style="padding:4px 10px;font-size:11px;" onclick="buildAndViewCoupaXml('${r.invoice_id}')">Build cXML</button>
-        <button class="btn btn-green" style="padding:4px 10px;font-size:11px;" onclick="downloadCoupaXml('${r.invoice_id}')">⬇ Download</button>
+        <button class="btn btn-blue" style="padding:4px 10px;font-size:11px;" onclick="buildAndViewXml('${r.invoice_id}','coupa')">Coupa</button>
+        <button class="btn btn-blue" style="padding:4px 10px;font-size:11px;background:#1e3a5f;" onclick="buildAndViewXml('${r.invoice_id}','ariba')">Ariba</button>
+        <button class="btn btn-green" style="padding:4px 10px;font-size:11px;" onclick="downloadXml('${r.invoice_id}','coupa')">⬇ Coupa</button>
+        <button class="btn btn-green" style="padding:4px 10px;font-size:11px;background:#1e3a5f;" onclick="downloadXml('${r.invoice_id}','ariba')">⬇ Ariba</button>
       </td>
     </tr>`).join('');
   } catch(e) { console.error('Invoices:', e); }
@@ -1431,33 +1433,35 @@ async function createDemoInvoice() {
   } catch(e) { alert('Error: ' + e.message); }
 }
 
-async function buildAndViewCoupaXml(invoice_id) {
+async function buildAndViewXml(invoice_id, format) {
   try {
-    const resp = await fetch(`${API}/api/v1/invoices/${invoice_id}/build-coupa`, {method:'POST'});
+    const resp = await fetch(`${API}/api/v1/invoices/${invoice_id}/build-${format}`, {method:'POST'});
     const data = await resp.json();
     if (!resp.ok) { alert('Error: ' + (data.detail||'Unknown')); return; }
-    // Show in modal
-    document.getElementById('modalTitle').textContent = 'Coupa cXML — Invoice ' + data.invoice_id;
-    document.getElementById('modalFilename').textContent = `invoice_${data.invoice_id}_coupa.xml`;
-    document.getElementById('jsonViewer').textContent = data.coupa_xml;
-    document.getElementById('modalDownloadLink').href = 'data:text/xml;charset=utf-8,' + encodeURIComponent(data.coupa_xml);
-    document.getElementById('modalDownloadLink').download = `invoice_${data.invoice_id}_coupa.xml`;
+    const xml = data.coupa_xml || data.ariba_xml;
+    const title = format === 'coupa' ? 'Coupa' : 'Ariba';
+    document.getElementById('modalTitle').textContent = `${title} cXML — Invoice ${data.invoice_id}`;
+    document.getElementById('modalFilename').textContent = `invoice_${data.invoice_id}_${format}.xml`;
+    document.getElementById('jsonViewer').textContent = xml;
+    document.getElementById('modalDownloadLink').href = 'data:text/xml;charset=utf-8,' + encodeURIComponent(xml);
+    document.getElementById('modalDownloadLink').download = `invoice_${data.invoice_id}_${format}.xml`;
     document.getElementById('modalDownloadLink').style.display = '';
     document.getElementById('jsonModal').style.display = 'block';
     document.body.style.overflow = 'hidden';
   } catch(e) { alert('Error: ' + e.message); }
 }
 
-async function downloadCoupaXml(invoice_id) {
+async function downloadXml(invoice_id, format) {
   try {
-    const resp = await fetch(`${API}/api/v1/invoices/${invoice_id}/build-coupa`, {method:'POST'});
+    const resp = await fetch(`${API}/api/v1/invoices/${invoice_id}/build-${format}`, {method:'POST'});
     const data = await resp.json();
     if (!resp.ok) { alert('Error: ' + (data.detail||'Unknown')); return; }
-    const blob = new Blob([data.coupa_xml], {type: 'application/xml'});
+    const xml = data.coupa_xml || data.ariba_xml;
+    const blob = new Blob([xml], {type: 'application/xml'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `invoice_${data.invoice_id}_coupa.xml`;
+    a.download = `invoice_${data.invoice_id}_${format}.xml`;
     a.click();
     URL.revokeObjectURL(url);
   } catch(e) { alert('Error: ' + e.message); }

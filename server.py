@@ -75,6 +75,7 @@ from services.processing.invoice_store import (
 )
 from services.processing.p21_invoice_pull import pull_invoices_for_so
 from services.processing.coupa_invoice_builder import build_coupa_invoice_xml
+from services.processing.ariba_invoice_builder import build_ariba_invoice_xml
 
 settings = get_settings()
 
@@ -3055,6 +3056,28 @@ async def build_coupa_payload(invoice_id: str, _auth=Depends(_require_api_key)):
     return {
         "invoice_id": invoice_id,
         "coupa_xml": xml,
+        "po_no": po_no,
+        "so_number": invoice.get("so_number", ""),
+    }
+
+
+@app.post("/api/v1/invoices/{invoice_id}/build-ariba")
+async def build_ariba_payload(invoice_id: str, _auth=Depends(_require_api_key)):
+    """Build Ariba cXML payload for an invoice. Returns the XML string."""
+
+    invoice = get_invoice(invoice_id)
+    if not invoice:
+        raise HTTPException(404, f"Invoice {invoice_id} not found")
+
+    po_no = invoice.get("po_no", "")
+    po_data = local_store.get_po(po_no) if po_no else None
+
+    xml = build_ariba_invoice_xml(invoice, po_data)
+    update_invoice(invoice_id, {"ariba_payload": xml, "status": "ready_to_send"})
+
+    return {
+        "invoice_id": invoice_id,
+        "ariba_xml": xml,
         "po_no": po_no,
         "so_number": invoice.get("so_number", ""),
     }
