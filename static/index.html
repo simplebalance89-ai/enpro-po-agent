@@ -213,8 +213,8 @@ details.help-section[open] > summary .arrow { transform:rotate(90deg); }
     <button class="tab admin-only" onclick="showTab('pipeline')">Pipeline</button>
   </div>
   <div class="tab-group">
-    <button class="tab disabled" id="tabInvoices" onclick="showTab('invoices')" title="Invoice sync module — requires P21 SQL + Coupa endpoint configuration">
-      🧾 Invoices <span class="badge">—</span>
+    <button class="tab" id="tabInvoices" onclick="showTab('invoices')" title="Invoice sync — pull from P21, build cXML for Ariba/Coupa">
+      🧾 Invoices <span class="badge" id="invoiceBadge">0</span>
     </button>
   </div>
 </div>
@@ -496,18 +496,30 @@ details.help-section[open] > summary .arrow { transform:rotate(90deg); }
 
 <!-- INVOICES -->
 <div class="tab-panel" id="panel-invoices">
-  <div style="text-align:center;padding:60px 20px;">
-    <div style="font-size:48px;margin-bottom:16px;">🧾</div>
-    <h2 style="color:#64748b;margin-bottom:8px;">Invoice Sync — Coming Soon</h2>
-    <p style="color:#475569;max-width:500px;margin:0 auto;line-height:1.6;">
-      This module will pull invoices from P21 after SO fulfillment and send them to Coupa as cXML.
-      <br><br>
-      <strong>Planned flow:</strong> P21 creates invoice → Agent pulls it → Builds Coupa cXML → POST to Coupa
-    </p>
-    <div style="margin-top:24px;padding:12px 20px;background:#1a1d27;border:1px solid #2a2d3a;border-radius:8px;display:inline-block;">
-      <span style="color:#475569;font-size:12px;">Status: </span>
-      <span style="color:#fbbf24;font-weight:600;font-size:12px;">🔒 Disabled — Admin configuration required</span>
+  <div class="xw-section">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px;">
+      <h3 style="margin:0;">🧾 Invoices — P21 to Ariba/Coupa cXML</h3>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-gray" style="padding:6px 14px;font-size:12px;" onclick="loadInvoices()">↻ Refresh</button>
+        <button class="btn btn-blue" style="padding:6px 14px;font-size:12px;" onclick="createDemoInvoice()">+ Demo Invoice</button>
+      </div>
     </div>
+    <p class="desc" style="margin-top:6px;">
+      Pull invoices from P21 after SO fulfillment, then build and download cXML for Ariba or Coupa.
+      <strong>When P21 SQL is connected:</strong> click <em>Sync from P21</em> to pull by SO number.
+      <strong>Without P21 SQL:</strong> use <em>+ Demo Invoice</em> to create a test invoice and generate cXML.
+    </p>
+    <div id="invoiceNotice" style="display:none;margin-bottom:10px;padding:8px 12px;border-radius:6px;font-size:12px;background:#1a1d27;border:1px solid #2a2d3a;color:#a5f3fc;"></div>
+    <div id="invoicesEmpty" class="empty" style="display:none;">No invoices found.</div>
+    <div class="scroll-table">
+      <table id="invoicesTable" style="display:none;">
+        <thead><tr>
+          <th>Invoice #</th><th>SO #</th><th>PO #</th><th>Customer</th><th>Date</th><th>Amount</th><th>Status</th><th>Lines</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="invoicesTbody"></tbody>
+      </table>
+    </div>
+    <div id="invoiceDetailPanel" style="margin-top:16px;display:none;"></div>
   </div>
 </div>
 
@@ -1373,6 +1385,84 @@ async function viewPO(intakeId) {
   } catch(e) { alert('Error loading PO: ' + e.message); }
 }
 
+// ── Invoice Tab ───────────────────────────────────────────────────────────────
+
+async function loadInvoices() {
+  try {
+    const data = await (await fetch(`${API}/api/v1/invoices`)).json();
+    const tbody = document.getElementById('invoicesTbody');
+    const tbl = document.getElementById('invoicesTable');
+    const empty = document.getElementById('invoicesEmpty');
+    document.getElementById('invoiceBadge').textContent = data.count || 0;
+    if (!data.invoices?.length) { empty.style.display='block'; tbl.style.display='none'; return; }
+    empty.style.display='none'; tbl.style.display='table';
+    tbody.innerHTML = data.invoices.map(r => `<tr>
+      <td style="font-weight:600;">${r.invoice_no||'-'}</td>
+      <td>${r.so_number||'-'}</td>
+      <td style="color:#60a5fa;">${r.po_no||'-'}</td>
+      <td>${r.customer_id||'-'}</td>
+      <td style="font-size:11px;color:#64748b;">${r.invoice_date?(new Date(r.invoice_date)).toLocaleDateString():'-'}</td>
+      <td style="font-weight:600;">$${r.invoice_amount?.toFixed?.(2)||r.invoice_amount||'0.00'}</td>
+      <td><span class="badge-valid ${r.status||'pending'}">${(r.status||'pending').toUpperCase()}</span></td>
+      <td style="text-align:center;">${r.lines?.length||0}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-blue" style="padding:4px 10px;font-size:11px;" onclick="buildAndViewCoupaXml('${r.invoice_id}')">Build cXML</button>
+        <button class="btn btn-green" style="padding:4px 10px;font-size:11px;" onclick="downloadCoupaXml('${r.invoice_id}')">⬇ Download</button>
+      </td>
+    </tr>`).join('');
+  } catch(e) { console.error('Invoices:', e); }
+}
+
+async function createDemoInvoice() {
+  const so_number = prompt('SO Number (or leave blank for demo):', 'SO-DEMO-001');
+  if (so_number === null) return;
+  const po_no = prompt('PO Number:', '4500819454');
+  if (po_no === null) return;
+  try {
+    const resp = await fetch(`${API}/api/v1/invoices/demo`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({so_number: so_number||'SO-DEMO-001', po_no: po_no||'4500819454'})
+    });
+    const data = await resp.json();
+    if (!resp.ok) { alert('Error: ' + (data.detail||'Unknown')); return; }
+    alert(`Demo invoice created: ${data.invoice.invoice_no}`);
+    loadInvoices();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function buildAndViewCoupaXml(invoice_id) {
+  try {
+    const resp = await fetch(`${API}/api/v1/invoices/${invoice_id}/build-coupa`, {method:'POST'});
+    const data = await resp.json();
+    if (!resp.ok) { alert('Error: ' + (data.detail||'Unknown')); return; }
+    // Show in modal
+    document.getElementById('modalTitle').textContent = 'Coupa cXML — Invoice ' + data.invoice_id;
+    document.getElementById('modalFilename').textContent = `invoice_${data.invoice_id}_coupa.xml`;
+    document.getElementById('jsonViewer').textContent = data.coupa_xml;
+    document.getElementById('modalDownloadLink').href = 'data:text/xml;charset=utf-8,' + encodeURIComponent(data.coupa_xml);
+    document.getElementById('modalDownloadLink').download = `invoice_${data.invoice_id}_coupa.xml`;
+    document.getElementById('modalDownloadLink').style.display = '';
+    document.getElementById('jsonModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function downloadCoupaXml(invoice_id) {
+  try {
+    const resp = await fetch(`${API}/api/v1/invoices/${invoice_id}/build-coupa`, {method:'POST'});
+    const data = await resp.json();
+    if (!resp.ok) { alert('Error: ' + (data.detail||'Unknown')); return; }
+    const blob = new Blob([data.coupa_xml], {type: 'application/xml'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `invoice_${data.invoice_id}_coupa.xml`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
 function showTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -1385,7 +1475,7 @@ function showTab(name) {
   if (name === 'batch') loadBatch();
   if (name === 'payloads') loadPayloads();
   if (name === 'outbound') loadOutbound();
-  // invoices is a coming-soon panel — no data load
+  if (name === 'invoices') loadInvoices();
 }
 
 async function loadPayloads() {

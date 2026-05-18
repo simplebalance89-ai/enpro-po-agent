@@ -2980,12 +2980,13 @@ async def get_ui_config():
 
 @app.get("/api/v1/invoices")
 async def list_all_invoices():
-    """List all invoices pulled from P21."""
+    """List all invoices pulled from P21 or entered manually."""
     invoices = list_invoices()
     return {
         "invoices": invoices,
         "count": len(invoices),
         "invoice_module_enabled": settings.invoice_module_enabled,
+        "p21_sql_configured": bool(settings.p21_sql_server),
     }
 
 
@@ -3040,8 +3041,6 @@ async def get_invoice_detail(invoice_id: str):
 @app.post("/api/v1/invoices/{invoice_id}/build-coupa")
 async def build_coupa_payload(invoice_id: str, _auth=Depends(_require_api_key)):
     """Build Coupa cXML payload for an invoice. Returns the XML string."""
-    if not settings.invoice_module_enabled:
-        raise HTTPException(503, "Invoice module is disabled — contact admin to enable")
 
     invoice = get_invoice(invoice_id)
     if not invoice:
@@ -3058,6 +3057,68 @@ async def build_coupa_payload(invoice_id: str, _auth=Depends(_require_api_key)):
         "coupa_xml": xml,
         "po_no": po_no,
         "so_number": invoice.get("so_number", ""),
+    }
+
+
+class DemoInvoiceRequest(BaseModel):
+    so_number: str = "SO-DEMO-001"
+    po_no: str = "4500819454"
+    customer_id: str = "207620"
+    invoice_amount: float = 1250.00
+
+
+@app.post("/api/v1/invoices/demo")
+async def create_demo_invoice(req: DemoInvoiceRequest, _auth=Depends(_require_api_key)):
+    """Create a demo invoice for testing cXML generation without P21 SQL."""
+    import uuid
+    invoice_id = f"DEMO_INV_{uuid.uuid4().hex[:8].upper()}"
+    invoice = {
+        "invoice_id": invoice_id,
+        "invoice_no": invoice_id,
+        "so_number": req.so_number,
+        "po_no": req.po_no,
+        "customer_id": req.customer_id,
+        "invoice_date": datetime.utcnow().isoformat(),
+        "ship_date": datetime.utcnow().isoformat(),
+        "terms_id": "NET30",
+        "carrier_id": "FEDEX",
+        "freight_amount": 25.00,
+        "tax_amount": 87.50,
+        "invoice_amount": req.invoice_amount,
+        "ship_to": {
+            "name": "Stepan Chemical",
+            "address1": "123 Industrial Blvd",
+            "city": "Houston",
+            "state": "TX",
+            "zip": "77001",
+        },
+        "lines": [
+            {
+                "line_no": 1,
+                "item_id": "CS-P0400/3000",
+                "description": "Buffer Solution / CaliMat pH Buffer",
+                "qty_invoiced": 10,
+                "unit_price": 185.50,
+                "extended_price": 1855.00,
+            },
+            {
+                "line_no": 2,
+                "item_id": "CS-P0400/3001",
+                "description": "Calibration Standard",
+                "qty_invoiced": 5,
+                "unit_price": 96.52,
+                "extended_price": 482.60,
+            },
+        ],
+        "status": "demo",
+        "source": "demo",
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    save_invoice(invoice_id, invoice)
+    return {
+        "status": "created",
+        "invoice": invoice,
+        "message": "Demo invoice created. Click 'Build cXML' to generate Coupa XML.",
     }
 
 
