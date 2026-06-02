@@ -1,0 +1,299 @@
+"""
+cism_batch.py -- Accumulate approved POs into a single CISM batch for P21 import.
+
+Flow: Approved POs → batch header CSV + batch lines CSV → Azure Blob → Local → P21 CISM
+
+The batch grows as POs are approved. When ready, export/download the batch,
+upload to Azure Blob, sync to local machine, and P21's CISM job imports it.
+"""
+
+import csv
+import filelock
+import logging
+import os
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+BATCH_DIR = os.environ.get("CISM_BATCH_DIR", "./data/cism_batch")
+BATCH_HEADER_FILE = "batch_orderquoteheader.csv"
+BATCH_LINES_FILE = "batch_orderquoteline.csv"
+
+# Aligned with cism_so_generator.py (75 header columns)
+HEADER_COLUMNS = [
+    "Import Set No", "Customer ID", "Customer Name", "Company ID",
+    "Sales Location ID", "Customer PO Number", "Contact ID", "Contact Name",
+    "Taker", "Job Name", "Order Date", "Requested Date", "Quote", "Approved",
+    "Ship To ID", "Ship To Name", "Ship To Address 1", "Ship To Address 2",
+    "Ship To City", "Ship To State", "Ship To Zip Code", "Ship To Country",
+    "Source Location ID", "Carrier ID", "Carrier Name", "Route",
+    "Packing Basis", "Delivery Instructions", "Terms", "Terms Desc",
+    "Will Call", "Class 1", "Class 2", "Class 3", "Class 4", "Class 5",
+    "RMA_Flag", "Freight Code", "Third Party Billing Flag Desc",
+    "Capture Usage Default", "Allocate", "Contract Number",
+    "Invoice Batch Number", "Ship To Email Address",
+    "Set Invoice Exchange Rate Source Desc", "Ship To Phone", "Currency ID",
+    "Apply Builder Allowance Flag", "Quote Expiration Date", "Promise Date",
+    "Import As Quote", "Quote Number", "Web Reference Number",
+    "Create Invoice", "Strategic Pricing Library ID", "Merchandise Credit",
+    "Order Type Priority", "UPS Code", "Supplier Order No",
+    "Supplier Release No", "Placed By Name", "Req Payment Upon Release",
+    "Freight Out", "Ship To Address", "Quote Type", "Homeowner", "Installer",
+    "Building", "Architect", "Designer", "Pricing Source",
+    "Ship to Latitude", "Ship To Longitude", "Exemption No", "Order Number",
+]
+
+# Aligned with cism_so_generator.py (39 unique line columns)
+LINE_COLUMNS = [
+    "Import Set Number", "Line No", "Item ID", "Unit Quantity",
+    "Unit of Measure", "Unit Price", "Extended Description",
+    "Source Location ID", "Ship Location ID", "Product Group ID",
+    "Supplier ID", "Supplier Name", "Required Date", "Expedite Date",
+    "Will Call", "Tax Item", "OK to Interchange", "Pricing Unit",
+    "Commission Cost", "Other Cost", "PO Cost", "Disposition", "Scheduled",
+    "Manual Price Override", "Commission Cost Edited", "Other Cost Edited",
+    "Capture Usage", "Tag and Hold Class ID", "Contract Bin ID",
+    "Contract No.", "Allocation Qty", "Promise Date", "Revision Level",
+    "Resolve Item Contract", "Sample", "Quote Line No.", "Quote Complete",
+    "Item Description", "Invoice No.",
+]
+
+
+def _ensure_dir():
+    os.makedirs(BATCH_DIR, exist_ok=True)
+
+
+def _header_path():
+    return os.path.join(BATCH_DIR, BATCH_HEADER_FILE)
+
+
+def _lines_path():
+    return os.path.join(BATCH_DIR, BATCH_LINES_FILE)
+
+
+def _atomic_append_csv(target_path: str, fieldnames: list, new_rows: list):
+    """Atomically append rows to a CSV file using a file lock."""
+    lock_path = target_path + ".lock"
+    with filelock.FileLock(lock_path):
+        tmp_path = target_path + ".tmp"
+
+        existing_rows = []
+        write_header = True
+        if os.path.exists(target_path) and os.path.getsize(target_path) > 0:
+            with open(target_path, "r", newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                existing_rows = list(reader)
+                write_header = False
+
+        with open(tmp_path, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=fieldnames)
+            if write_header:
+                w.writeheader()
+            for row in existing_rows:
+                w.writerow(row)
+            for row in new_rows:
+                w.writerow(row)
+
+        os.replace(tmp_path, target_path)
+
+
+def add_to_batch(po_data: dict):
+    """Add an approved PO to the running CISM batch."""
+    _ensure_dir()
+
+    cism = po_data.get("cism", {})
+    header = po_data.get("header", {})
+    lines = po_data.get("lines", [])
+    cust = po_data.get("customer_match", {})
+    import_set = cism.get("import_set_no", "")
+
+    if not import_set:
+        logger.warning(f"No import_set_no for PO {po_data.get('po_no')}, skipping batch")
+        return
+
+    # Get customer defaults (contact_id, address_id, terms, carrier)
+    defaults = po_data.get("customer_defaults", {})
+
+    # Build header row
+    header_row = {
+        "Import Set No": import_set,
+        "Customer ID": cust.get("p21_id", ""),
+        "Customer Name": cust.get("name", "")[:50],
+        "Company ID": "1",
+        "Sales Location ID": "10",
+        "Customer PO Number": po_data.get("po_no", "")[:50],
+        "Contact ID": defaults.get("default_contact_id", ""),
+        "Contact Name": (header.get("buyer") or cust.get("name", ""))[:50],
+        "Taker": header.get("taker", "") or "SYSTEM",
+        "Job Name": "",
+        "Order Date": _fmt_date(header.get("order_date", "")),
+        "Requested Date": _fmt_date(header.get("order_date", "")),
+        "Quote": "",
+        "Approved": "Y",
+        "Ship To ID": defaults.get("default_address_id", ""),
+        "Ship To Name": header.get("ship2_name", "")[:50],
+        "Ship To Address 1": header.get("ship2_add1", "")[:50],
+        "Ship To Address 2": header.get("ship2_add2", "")[:50],
+        "Ship To City": header.get("ship2_city", "")[:50],
+        "Ship To State": header.get("ship2_state", "")[:50],
+        "Ship To Zip Code": header.get("ship2_zip", "")[:10],
+        "Ship To Country": header.get("ship2_country", "US")[:50],
+        "Source Location ID": "10",
+        "Carrier ID": defaults.get("default_carrier_id", ""),
+        "Carrier Name": "",
+        "Route": "",
+        "Packing Basis": "Partial/Order",
+        "Delivery Instructions": (header.get("comments") or "")[:255],
+        "Terms": defaults.get("default_terms", ""),
+        "Terms Desc": "",
+        "Will Call": "N",
+        "Class 1": "",
+        "Class 2": "",
+        "Class 3": "",
+        "Class 4": "",
+        "Class 5": "",
+        "RMA_Flag": "",
+        "Freight Code": "",
+        "Third Party Billing Flag Desc": "",
+        "Capture Usage Default": "",
+        "Allocate": "",
+        "Contract Number": "",
+        "Invoice Batch Number": "",
+        "Ship To Email Address": header.get("ship2_email", "")[:255],
+        "Set Invoice Exchange Rate Source Desc": "",
+        "Ship To Phone": header.get("ship2_phone", "")[:20],
+        "Currency ID": "",
+        "Apply Builder Allowance Flag": "",
+        "Quote Expiration Date": "",
+        "Promise Date": "",
+        "Import As Quote": "",
+        "Quote Number": "",
+        "Web Reference Number": "",
+        "Create Invoice": "",
+        "Strategic Pricing Library ID": "",
+        "Merchandise Credit": "",
+        "Order Type Priority": "",
+        "UPS Code": "",
+        "Supplier Order No": po_data.get("source_id", "")[:255],
+        "Supplier Release No": "",
+        "Placed By Name": "",
+        "Req Payment Upon Release": "",
+        "Freight Out": "",
+        "Ship To Address": "",
+        "Quote Type": "",
+        "Homeowner": "",
+        "Installer": "",
+        "Building": "",
+        "Architect": "",
+        "Designer": "",
+        "Pricing Source": "",
+        "Ship to Latitude": "",
+        "Ship To Longitude": "",
+        "Exemption No": "",
+        "Order Number": "",
+    }
+    _atomic_append_csv(_header_path(), HEADER_COLUMNS, [header_row])
+
+    # Build line rows
+    line_rows = []
+    for i, line in enumerate(lines, 1):
+        unit_of_measure = (line.get("unit_of_measure") or "EA")[:8]
+        line_rows.append({
+            "Import Set Number": import_set,
+            "Line No": str(line.get("line_no", i)),
+            "Item ID": (line.get("item_id_p21") or line.get("supplier_part_id", ""))[:40],
+            "Unit Quantity": str(line.get("qty_ordered", 0)),
+            "Unit of Measure": unit_of_measure,
+            "Unit Price": f"{float(line.get('unit_price', 0) or 0):.4f}",
+            "Extended Description": (line.get("item_description") or "")[:255],
+            "Source Location ID": "10",
+            "Ship Location ID": "10",
+            "Product Group ID": (line.get("product_group") or "")[:8],
+            "Supplier ID": (line.get("supplier_id") or "")[:9],
+            "Supplier Name": "",
+            "Required Date": _fmt_date(line.get("required_date") or line.get("date_due") or header.get("order_date", "")),
+            "Expedite Date": "",
+            "Will Call": "N",
+            "Tax Item": "Y",
+            "OK to Interchange": "N",
+            "Pricing Unit": unit_of_measure,
+            "Commission Cost": "",
+            "Other Cost": "",
+            "PO Cost": "",
+            "Disposition": line.get("disposition", "B")[:1],
+            "Scheduled": "N",
+            "Manual Price Override": "Y" if line.get("unit_price") else "N",
+            "Commission Cost Edited": "N",
+            "Other Cost Edited": "N",
+            "Capture Usage": "N",
+            "Tag and Hold Class ID": "",
+            "Contract Bin ID": "",
+            "Contract No.": "",
+            "Allocation Qty": "",
+            "Promise Date": "",
+            "Revision Level": "",
+            "Resolve Item Contract": "N",
+            "Sample": "N",
+            "Quote Line No.": "",
+            "Quote Complete": "",
+            "Item Description": (line.get("item_description") or "")[:40],
+            "Invoice No.": "",
+        })
+    _atomic_append_csv(_lines_path(), LINE_COLUMNS, line_rows)
+
+    logger.info(f"Added to CISM batch: PO {po_data.get('po_no')} ({import_set}), {len(lines)} lines")
+
+
+def get_batch_status() -> dict:
+    """Get current batch contents and stats."""
+    _ensure_dir()
+    h_path = _header_path()
+    l_path = _lines_path()
+
+    headers = []
+    lines = []
+
+    if os.path.exists(h_path) and os.path.getsize(h_path) > 0:
+        with open(h_path, encoding="utf-8") as f:
+            headers = list(csv.DictReader(f))
+
+    if os.path.exists(l_path) and os.path.getsize(l_path) > 0:
+        with open(l_path, encoding="utf-8") as f:
+            lines = list(csv.DictReader(f))
+
+    return {
+        "header_count": len(headers),
+        "line_count": len(lines),
+        "headers": headers,
+        "lines": lines,
+        "header_file": h_path,
+        "lines_file": l_path,
+        "header_size": os.path.getsize(h_path) if os.path.exists(h_path) else 0,
+        "lines_size": os.path.getsize(l_path) if os.path.exists(l_path) else 0,
+    }
+
+
+def clear_batch():
+    """Clear the batch after upload to Azure."""
+    h_path = _header_path()
+    l_path = _lines_path()
+    # Archive before clearing
+    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    archive_dir = os.path.join(BATCH_DIR, "archive")
+    os.makedirs(archive_dir, exist_ok=True)
+    if os.path.exists(h_path):
+        os.rename(h_path, os.path.join(archive_dir, f"batch_header_{ts}.csv"))
+    if os.path.exists(l_path):
+        os.rename(l_path, os.path.join(archive_dir, f"batch_lines_{ts}.csv"))
+    logger.info(f"Batch cleared and archived ({ts})")
+    return {"status": "cleared", "archive": ts}
+
+
+def _fmt_date(d):
+    if not d:
+        return ""
+    try:
+        dt = datetime.fromisoformat(str(d).replace("Z", "").split("T")[0])
+        return dt.strftime("%m/%d/%Y")
+    except:
+        return str(d)[:10]

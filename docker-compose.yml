@@ -1,0 +1,46 @@
+version: "3.8"
+
+services:
+  enpro-po-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: enpro-po-agent
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - APP_API_KEY=${APP_API_KEY:-}
+      - ADMIN_PASSPHRASE=${ADMIN_PASSPHRASE:-}
+      - CROSSWALK_DIR=/app/data/crosswalks
+      - CISM_OUTPUT_DIR=/app/data/cism_output
+      - CISM_SO_OUTPUT_DIR=/app/data/cism_so_output
+      - CISM_BATCH_DIR=/app/data/cism_batch
+      - PO_STORE_DIR=/app/data/po_store
+      - P21_AUTO_SUBMIT_ON_APPROVE=false
+      # Azure / Graph / P21 secrets — set in .env or export before docker-compose up
+      - AZURE_BLOB_CONNECTION_STRING=${AZURE_BLOB_CONNECTION_STRING:-}
+      - AZURE_BLOB_CONTAINER_NAME=${AZURE_BLOB_CONTAINER_NAME:-ariba-coupa}
+      - DOC_INTEL_ENDPOINT=${DOC_INTEL_ENDPOINT:-}
+      - DOC_INTEL_KEY=${DOC_INTEL_KEY:-}
+      - GRAPH_TENANT_ID=${GRAPH_TENANT_ID:-}
+      - GRAPH_CLIENT_ID=${GRAPH_CLIENT_ID:-}
+      - GRAPH_CLIENT_SECRET=${GRAPH_CLIENT_SECRET:-}
+      - GRAPH_MAILBOX=${GRAPH_MAILBOX:-orders@enproinc.com}
+      - P21_BASE_URL=${P21_BASE_URL:-}
+      - P21_API_USERNAME=${P21_API_USERNAME:-}
+      - P21_API_PASSWORD=${P21_API_PASSWORD:-}
+    volumes:
+      - enpro-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  enpro-data:

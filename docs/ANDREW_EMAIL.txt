@@ -1,0 +1,53 @@
+Hey Andrew,
+
+Quick update — the PO Agent is done and deployed. Here's the one-minute version.
+
+WHAT IT DOES
+------------
+Customer emails a PO (PDF attachment) to orders@enproinc.com. The agent:
+- Pulls the email every 60 seconds via Graph API
+- Parses the PDF with Azure Document Intelligence
+- Matches the ship-to address to a P21 customer ID (95% auto-match rate)
+- Matches each line item to a P21 inv_mast_uid via our crosswalk
+- Scores confidence (green/yellow/red)
+- Builds a P21 Transaction API v2 payload
+- Operator reviews and clicks Approve → P21 creates the Sales Order
+
+All rule-based algorithms. No LLM. No AI agent. No manual data entry.
+
+This is exactly what I told Grant on day one: it's an API that reads emails, runs matching algorithms against our crosswalks, and builds a P21 payload. The design hasn't changed since that meeting. I've built enough APIs to know this is a straightforward integration — not a research project. Let's get it across the finish line.
+
+LIVE RIGHT NOW
+--------------
+https://enpro-po-agent.onrender.com
+
+Click "🚀 Test Drive" in the top-right, drag any PO PDF onto the drop zone, and watch it build the P21 payload in real time. Then click "🎤 Mic Drop" for the animated proof.
+
+WHAT I NEED FROM YOU
+--------------------
+Three environment variables to enable live P21 submit:
+
+P21_BASE_URL=https://<your-p21-server>:3333
+P21_API_USERNAME=<transaction-api-user>
+P21_API_PASSWORD=<transaction-api-password>
+
+That's it. The "Submit to P21" buttons in the UI go live immediately. We can also set P21_AUTO_SUBMIT_ON_APPROVE=true to skip the button entirely — approve and the SO gets created automatically.
+
+I can set these myself on Render and test the connection end-to-end. Just send me the credentials. No need to bother Jordan — I got this.
+
+ALSO BUILT (DISABLED FOR NOW)
+-----------------------------
+Invoice sync module: pulls invoices from P21 (dbo.oe_invoice_hdr/line) and sends them to Coupa as cXML. Grayed out in the UI until you want it enabled.
+
+QUEUE STATUS
+------------
+22 POs ingested so far
+21 green (auto-resolved)
+1 red — PO 4098053 (Stepan Chemical, needs manual customer map)
+4 approved
+
+Postman collection attached if you want to hit the API directly.
+
+Let me know when you have those 3 P21 vars and I'll flip the switch.
+
+— Pete

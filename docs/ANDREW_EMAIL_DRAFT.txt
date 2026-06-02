@@ -1,0 +1,45 @@
+Andrew,
+
+Quick update. We proved the PO-to-P21 pipeline end-to-end on the sandbox today. I created one test Sales Order via direct SQL insert to verify all our mappings were correct. Order 1210282 loaded cleanly into oe_hdr and oe_line. We did this specifically to validate the schema mapping before building the automated piece, and it worked.
+
+Where the portal is today:
+
+The PO Agent is live at https://enpro-po-agent.onrender.com and operational as a proof-of-concept. It ingests POs via email, runs crosswalk matching against customer and item master data, scores confidence across four dimensions, and presents a review queue for human approval. On approval it generates CISM CSV files, P21 Transaction API payloads, and invoice cXML for Ariba/Coupa. The CISM batch tab is now active for operators, and the invoice module framework is scoped but not yet finished. We can map out the invoice timeline separately or discuss it on our next call.
+
+The three integration paths we evaluated:
+
+1. Direct SQL - proven today on the sandbox. Fastest path. No external dependencies.
+2. P21 Transaction API - ready to implement when credentials are available. One working session with Jason.
+3. CISM batch import - viable but requires P21 profile setup on your end.
+
+Direct SQL is the cleanest path for now. We can schedule a PowerShell job to poll approved POs and insert them into P21 automatically. When the Transaction API credentials arrive we flip a config flag and it posts via REST instead. Same pipeline, your choice of delivery method.
+
+What we need from EnPro to move toward production:
+
+1. Mailbox forward - forward Ariba/Coupa PO emails to orders@enproinc.com so the agent can ingest real POs. Steve can set this up in 30 minutes. Happy to walk him through it on a quick working session.
+
+2. Production P21 access - either SQL connection details or Transaction API credentials. If SQL, we are ready to schedule the automated insert today. If API, one session with Jason and we have it running.
+
+3. Clean crosswalk data - we need to review and organize all crosswalks: customers, items, ship-to mappings, and customer defaults. I can give Jason a SQL template to pull exactly what we need, or we can do it together.
+
+Time status:
+
+After our first meeting with Jason about the API and our follow-up last week, we originally scoped 20 hours to get to a working proof-of-concept with validated P21 integration. We are now at approximately 25 hours. The extra 5 went into P21 schema discovery and validating the direct SQL insert path. We are on track with the original scope.
+
+Time remaining to get the PO pipeline to production: approximately 20 to 25 hours.
+- Mailbox setup and email ingestion testing: 2 to 3 hours
+- Crosswalk data cleanup and review: 6 to 8 hours
+- PowerShell SQL inserter and scheduled job: 4 to 5 hours
+- End-to-end testing with live POs: 6 to 8 hours
+- Portal polish and monitoring: 6 to 8 hours
+- Documentation and handoff: 2 to 3 hours
+
+Next step:
+
+Once the mailbox is forwarding and I have production P21 access, we are roughly two weeks from live. If you want to refine scope or adjust priorities, let me know. We can also discuss the invoice module timeline separately.
+
+One other note - we also ported this same architecture over to the MRO portal front end without any external connections. I will send a separate email on that and everything we have open for EnPro along with a time to meet, a plan moving forward for the next month, and my overall thoughts.
+
+Thank you both.
+
+Peter

@@ -1,0 +1,2093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnPro PO Agent</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; }
+a { color: #60a5fa; text-decoration: none; }
+.topbar { background: #1a1d27; border-bottom: 1px solid #2a2d3a; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; }
+.topbar h1 { font-size: 17px; color: #fff; font-weight: 600; }
+.topbar h1 span { color: #64748b; font-weight: 400; font-size: 13px; margin-left: 8px; }
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4ade80; margin-right: 6px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; padding: 20px 24px; }
+.stat-card { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; padding: 16px 20px; }
+.stat-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; }
+.stat-card .value { font-size: 28px; font-weight: 700; color: #fff; margin-top: 4px; }
+.stat-card .sub { font-size: 12px; color: #475569; margin-top: 2px; }
+.tabs { display: flex; align-items: flex-end; padding: 0 24px; border-bottom: 1px solid #2a2d3a; gap: 24px; background: #0f1117; }
+.tab-group { display: flex; align-items: flex-end; gap: 0; }
+.tab-group-label { font-size: 10px; text-transform: uppercase; color: #475569; letter-spacing: 1px; padding: 0 12px 10px 0; font-weight: 600; white-space: nowrap; }
+.tab { padding: 10px 16px; font-size: 13px; color: #64748b; cursor: pointer; border-bottom: 2px solid transparent; background: none; border-top: none; border-left: none; border-right: none; white-space: nowrap; transition: all 0.15s; }
+.tab:hover { color: #e0e0e0; }
+.tab.active { color: #fff; border-bottom-color: #3b82f6; }
+.tab .badge { background: #334155; color: #94a3b8; padding: 1px 7px; border-radius: 10px; font-size: 10px; margin-left: 5px; font-weight: 600; }
+.tab.active .badge { background: #3b82f6; color: #fff; }
+.content { padding: 24px; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.queue-layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; }
+.queue-sidebar { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; max-height: calc(100vh - 220px); overflow-y: auto; }
+.queue-header { padding: 12px 16px; border-bottom: 1px solid #2a2d3a; display: flex; justify-content: space-between; align-items: center; }
+.queue-header h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; }
+.filter-pills { display: flex; gap: 4px; }
+.pill { padding: 3px 10px; border-radius: 12px; font-size: 11px; cursor: pointer; border: 1px solid #2a2d3a; background: transparent; color: #64748b; }
+.pill.active { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+.po-item { padding: 12px 16px; border-bottom: 1px solid #1e2030; cursor: pointer; }
+.po-item:hover { background: #1a1d2a; }
+.po-item.selected { background: #1e2a4a; border-left: 3px solid #3b82f6; }
+.po-num { font-weight: 600; font-size: 14px; color: #fff; }
+.po-meta { font-size: 12px; color: #475569; margin-top: 3px; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.dot.green { background: #4ade80; } .dot.yellow { background: #fbbf24; } .dot.red { background: #f87171; }
+.detail-panel { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; overflow-y: auto; max-height: calc(100vh - 220px); }
+.detail-panel h2 { font-size: 20px; margin-bottom: 16px; }
+.badge-conf { display: inline-block; padding: 3px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; margin-left: 8px; }
+.badge-conf.green { background: #0d3320; color: #4ade80; }
+.badge-conf.yellow { background: #332b00; color: #fbbf24; }
+.badge-conf.red { background: #3b1111; color: #f87171; }
+.meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
+.meta-box { background: #141620; border-radius: 6px; padding: 12px; }
+.meta-box .lbl { font-size: 10px; text-transform: uppercase; color: #475569; letter-spacing: 0.5px; }
+.meta-box .val { font-size: 15px; color: #fff; margin-top: 4px; }
+.meta-box .val.warn { color: #f87171; }
+table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+th { text-align: left; padding: 8px 10px; color: #475569; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid #2a2d3a; }
+td { padding: 8px 10px; border-bottom: 1px solid #1e2030; }
+tr:hover { background: #141620; }
+.score-pill { font-size: 11px; padding: 2px 8px; border-radius: 8px; }
+.score-pill.hi { background: #0d3320; color: #4ade80; }
+.score-pill.mid { background: #332b00; color: #fbbf24; }
+.score-pill.lo { background: #3b1111; color: #f87171; }
+.btn { padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
+.btn-green { background: #16a34a; color: #fff; } .btn-green:hover { background: #15803d; }
+.btn-red { background: #dc2626; color: #fff; } .btn-red:hover { background: #b91c1c; }
+.btn-gray { background: #334155; color: #e2e8f0; } .btn-gray:hover { background: #475569; }
+.btn-blue { background: #2563eb; color: #fff; } .btn-blue:hover { background: #1d4ed8; }
+.action-bar { display: flex; gap: 10px; margin-top: 16px; padding-top: 16px; border-top: 1px solid #2a2d3a; }
+.upload-zone { background: #1a1d27; border: 2px dashed #2a2d3a; border-radius: 8px; padding: 40px; text-align: center; max-width: 600px; }
+.upload-zone input[type="file"] { margin: 12px 0; }
+.upload-zone select, .upload-zone input { padding: 8px; background: #141620; color: #e0e0e0; border: 1px solid #2a2d3a; border-radius: 4px; }
+.xw-section { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+.xw-section h3 { font-size: 14px; margin-bottom: 8px; }
+.xw-section .desc { color: #64748b; font-size: 13px; margin-bottom: 12px; }
+.xw-section .count { color: #4ade80; font-weight: 600; }
+.pipe-step { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; padding: 16px 20px; margin-bottom: 12px; display: flex; align-items: flex-start; gap: 16px; }
+.pipe-num { min-width: 32px; height: 32px; border-radius: 50%; background: #3b82f6; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; margin-top: 2px; }
+.pipe-step .pipe-title { font-weight: 600; font-size: 14px; color: #fff; }
+.pipe-step .pipe-desc { font-size: 12px; color: #94a3b8; margin-top: 4px; line-height: 1.5; }
+.pipe-step .pipe-desc b { color: #4ade80; }
+.empty { text-align: center; padding: 40px; color: #475569; }
+.scroll-table { max-height: 400px; overflow-y: auto; }
+.badge-ob { display:inline-block; padding:2px 9px; border-radius:8px; font-size:11px; font-weight:600; text-transform:uppercase; }
+.badge-ob.pending  { background:#1e2030; color:#64748b; }
+.badge-ob.prepared { background:#1e3a5f; color:#60a5fa; }
+.badge-ob.ready    { background:#0d2d3a; color:#22d3ee; }
+.badge-ob.sent     { background:#0d3320; color:#4ade80; }
+.badge-ob.failed   { background:#3b1111; color:#f87171; }
+/* View mode */
+.mode-badge { display:inline-block; padding:3px 11px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; cursor:default; }
+.mode-badge.operator { background:#0d2d3a; color:#22d3ee; border:1px solid #164e63; }
+.mode-badge.admin    { background:#2d1b00; color:#fbbf24; border:1px solid #78350f; }
+.src-tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 6px; vertical-align: middle; }
+.src-tag.ariba { background: #1e3a5f; color: #7dd3fc; }
+.src-tag.coupa { background: #3f1e4a; color: #e9d5ff; }
+.src-tag.direct { background: #1a2e1a; color: #86efac; }
+/* UX refinement */
+.queue-subtitle { font-size:11px; color:#475569; margin-top:3px; font-weight:400; text-transform:none; letter-spacing:0; }
+.swim-lane-header { display:flex; justify-content:space-between; align-items:center; padding:7px 16px; font-size:10px; text-transform:uppercase; letter-spacing:1px; font-weight:700; border-top:1px solid #2a2d3a; border-bottom:1px solid #2a2d3a; position:sticky; top:0; z-index:2; }
+.swim-lane-header.needs-review { background:#1c1015; color:#fb923c; }
+.swim-lane-header.ready-to-approve { background:#0b1a10; color:#4ade80; }
+.swim-count { background:#334155; color:#94a3b8; padding:1px 7px; border-radius:8px; font-size:10px; font-weight:600; }
+.sticky-action-bar { position:sticky; top:0; z-index:10; background:#1e2130; border-bottom:1px solid #2a2d3a; padding:10px 20px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; border-radius:8px 8px 0 0; }
+.detail-content { padding:20px 24px 24px; }
+.help-section { background:#141620; border-radius:8px; margin-top:10px; border:1px solid #1e2030; }
+.help-toggle { cursor:pointer; display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:#94a3b8; padding:12px 16px; user-select:none; list-style:none; }
+.help-toggle::-webkit-details-marker { display:none; }
+.help-toggle .arrow { font-size:10px; color:#475569; transition:transform .15s; display:inline-block; }
+details.help-section[open] > summary .arrow { transform:rotate(90deg); }
+.help-body { padding:0 16px 14px; }
+/* Preflight panel */
+.preflight-panel { background:#141620; border:1px solid #2a2d3a; border-radius:8px; padding:16px; margin-top:16px; }
+.preflight-chips { display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+.preflight-chip { padding:6px 14px; border-radius:8px; font-size:13px; font-weight:600; }
+.preflight-chip.selected { background:#1e3a5f; color:#60a5fa; }
+.preflight-chip.included { background:#0d3320; color:#4ade80; }
+.preflight-chip.skipped  { background:#3b1111; color:#f87171; }
+.reason-badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:700; letter-spacing:.5px; background:#2d1b00; color:#fbbf24; font-family:monospace; }
+.badge-valid { display:inline-block; padding:2px 10px; border-radius:8px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+.badge-valid.batch_ready { background:#0d3320; color:#4ade80; }
+.badge-valid.needs_fix { background:#3b1111; color:#f87171; }
+.badge-valid.unknown { background:#1e2030; color:#64748b; }
+.validation-errors { margin-top:8px; padding:8px 12px; background:#1c0a0a; border:1px solid #3b1111; border-radius:6px; }
+.validation-errors .ve-title { font-size:10px; text-transform:uppercase; color:#f87171; letter-spacing:1px; font-weight:700; margin-bottom:4px; }
+.validation-errors .ve-item { font-size:12px; color:#fca5a5; padding:2px 0; }
+.validation-errors .ve-code { font-family:monospace; font-size:10px; background:#2d0f0f; padding:1px 5px; border-radius:3px; margin-right:5px; }
+
+/* Suggestion chips */
+.suggestion-box { background:#141620; border:1px solid #2a2d3a; border-radius:6px; padding:10px 12px; margin:8px 0; }
+.suggestion-box .suggestion-title { font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#64748b; margin-bottom:6px; }
+.suggestion-chip { display:flex; align-items:center; gap:8px; background:#1a1d27; border:1px solid #2a2d3a; border-radius:6px; padding:6px 10px; margin-bottom:6px; font-size:12px; }
+.suggestion-chip .suggestion-info { flex:1; }
+.suggestion-chip .suggestion-name { color:#e0e0e0; font-weight:600; }
+.suggestion-chip .suggestion-meta { color:#94a3b8; font-size:11px; }
+.suggestion-chip .suggestion-evidence { color:#475569; font-size:10px; margin-top:2px; }
+.suggestion-chip .suggestion-actions { display:flex; gap:6px; }
+.suggestion-chip button { padding:3px 10px; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer; border:none; }
+.suggestion-chip .btn-accept { background:#16a34a; color:#fff; }
+.suggestion-chip .btn-accept:hover { background:#15803d; }
+.suggestion-chip .btn-reject { background:#334155; color:#e2e8f0; }
+.suggestion-chip .btn-reject:hover { background:#475569; }
+.suggestion-chip.accepted { border-color:#16a34a; background:#0d1f14; }
+.suggestion-chip.rejected { opacity:0.4; }
+.suggestion-chip.hidden { display:none; }
+.overwrite-guard-banner { background:#2d1b00; border:1px solid #78350f; color:#fbbf24; padding:8px 12px; border-radius:6px; font-size:12px; margin-bottom:10px; }
+.source-badges { display: flex; gap: 6px; }
+.src-badge { padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.src-badge.ariba { background: #1e3a5f; color: #7dd3fc; border: 1px solid #1e40af; }
+.src-badge.coupa { background: #3f1e4a; color: #e9d5ff; border: 1px solid #7c3aed; }
+.src-badge.direct { background: #1a2e1a; color: #86efac; border: 1px solid #166534; }
+.mic-link { color: #fbbf24; font-weight: 600; font-size: 13px; text-decoration: none; padding: 3px 10px; border-radius: 4px; border: 1px solid transparent; transition: all 0.2s; }
+.mic-link:hover { background: #2d1b00; border-color: #78350f; }
+.tab.disabled { opacity: 0.4; cursor: not-allowed; color: #475569 !important; border-bottom-color: transparent !important; position: relative; }
+.tab.disabled:hover { color: #475569 !important; }
+.tab.disabled[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  z-index: 100;
+}
+.toast-container { position:fixed; top:16px; right:16px; z-index:9999; display:flex; flex-direction:column; gap:8px; }
+.toast { padding:12px 18px; border-radius:6px; font-size:13px; font-weight:600; color:#fff; box-shadow:0 4px 12px rgba(0,0,0,0.4); animation:toastIn 0.2s ease; min-width:240px; max-width:380px; }
+.toast.success { background:#16a34a; }
+.toast.error   { background:#dc2626; }
+.toast.warn    { background:#ca8a04; }
+.toast.info    { background:#2563eb; }
+@keyframes toastIn { from { transform:translateX(100%); opacity:0; } to { transform:translateX(0); opacity:1; } }
+@keyframes toastOut { from { transform:translateX(0); opacity:1; } to { transform:translateX(100%); opacity:0; } }
+.toast.hiding { animation:toastOut 0.2s ease forwards; }
+</style>
+</head>
+<body>
+<div id="diskWarning" style="display:none;position:sticky;top:0;z-index:10000;padding:8px 16px;text-align:center;font-size:13px;font-weight:600;"></div>
+<div class="toast-container" id="toastContainer"></div>
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:16px;">
+    <h1>EnPro PO Agent</h1>
+    <div class="source-badges">
+      <span class="src-badge ariba">Ariba</span>
+      <span class="src-badge coupa">Coupa</span>
+      <span class="src-badge direct">Email/Direct</span>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <span id="actorDisplay" style="font-size:12px;color:#94a3b8;"></span>
+    <span id="modeBadge" class="mode-badge operator">Operator</span>
+    <button id="modeToggleBtn" class="btn btn-gray" style="padding:4px 12px;font-size:11px;" onclick="toggleAdminMode()">Admin View</button>
+    <button id="logoutBtn" class="btn btn-gray" style="padding:4px 12px;font-size:11px;display:none;" onclick="logoutActor()">Logout</button>
+    <a href="/test-drive" target="_blank" style="color:#4ade80;font-weight:600;font-size:13px;text-decoration:none;padding:3px 10px;border-radius:4px;border:1px solid transparent;transition:all 0.2s;display:none;">🚀 Test Drive</a>
+    <a href="/micdrop" target="_blank" class="mic-link" style="display:none;">🎤 Mic Drop</a>
+    <span title="P21 API status" id="p21StatusDot" style="display:flex;align-items:center;gap:4px;font-size:11px;color:#64748b;"><span class="status-dot" style="background:#64748b;" id="p21Dot"></span> P21</span>
+    <span><span class="status-dot"></span> Online</span>
+  </div>
+</div>
+<div class="stats" id="statsRow">
+  <div class="stat-card admin-only"><div class="label">Total Processed</div><div class="value" id="sTotal">-</div><div class="sub">all time</div></div>
+  <div class="stat-card admin-only"><div class="label">Auto-Approved</div><div class="value" id="sGreen">-</div><div class="sub">green confidence</div></div>
+  <div class="stat-card"><div class="label">Needs Review</div><div class="value" id="sPending">-</div><div class="sub">in queue</div></div>
+  <div class="stat-card admin-only"><div class="label">Customers Mapped</div><div class="value" id="sCustXW">-</div><div class="sub">crosswalk entries</div></div>
+  <div class="stat-card admin-only"><div class="label">Item Coverage</div><div class="value" id="sItemXW">-</div><div class="sub">customer-item pairs</div></div>
+</div>
+<div class="tabs" id="mainTabs">
+  <div class="tab-group">
+    <span class="tab-group-label">📥 Intake</span>
+    <button class="tab active" onclick="showTab('queue')">Review Queue <span class="badge" id="queueBadge">0</span></button>
+    <button class="tab" onclick="showTab('processed')">Processed <span class="badge" id="procBadge">0</span></button>
+  </div>
+  <div class="tab-group">
+    <span class="tab-group-label">📤 Export / Batch</span>
+    <button class="tab" onclick="showTab('payloads')">P21 Payloads <span class="badge" id="payloadsBadge">0</span></button>
+    <button class="tab" onclick="showTab('batch')">CISM Batch <span class="badge" id="batchBadge">0</span></button>
+    <button class="tab admin-only" onclick="showTab('outbound')">Outbound Sync <span class="badge" id="outboundBadge">0</span></button>
+  </div>
+  <div class="tab-group admin-only">
+    <span class="tab-group-label">⚙️ Admin</span>
+    <button class="tab admin-only" onclick="showTab('crosswalk')">Crosswalk</button>
+    <button class="tab admin-only" onclick="showTab('cism')">Schema</button>
+    <button class="tab admin-only" onclick="showTab('pipeline')">Pipeline</button>
+    <button class="tab admin-only" onclick="showTab('audit')">Audit Trail</button>
+  </div>
+  <div class="tab-group">
+    <button class="tab disabled" id="tabInvoices" onclick="showTab('invoices')" title="Invoice sync module — requires P21 SQL + Coupa endpoint configuration">
+      🧾 Invoices <span class="badge">—</span>
+    </button>
+  </div>
+</div>
+<div class="content">
+
+<!-- REVIEW QUEUE -->
+<div class="tab-panel active" id="panel-queue">
+  <div class="queue-layout">
+    <div class="queue-sidebar">
+      <div class="queue-header">
+        <h3>Needs Action</h3><div class="queue-subtitle">Select a PO to review and take action</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="filter-pills">
+            <button class="pill active" onclick="filterQ('all')">All</button>
+            <button class="pill" onclick="filterQ('green')">Green</button>
+            <button class="pill" onclick="filterQ('yellow')">Yellow</button>
+            <button class="pill" onclick="filterQ('red')">Red</button>
+          </div>
+          <button id="bulkApproveBtn" class="btn btn-green" style="padding:3px 10px;font-size:11px;" disabled onclick="openBulkModal()">Approve All Green (0)</button>
+        </div>
+      </div>
+      <div id="poList"><div class="empty" style="padding:30px;">Loading...</div></div>
+      <div style="padding:12px 16px; border-top:1px solid #2a2d3a;">
+        <div style="font-size:11px;text-transform:uppercase;color:#64748b;letter-spacing:1px;margin-bottom:8px;">Add PO to Review</div>
+        <input type="file" id="fileUpload" accept=".xml,.pdf,.csv" style="font-size:11px;">
+        <select id="uploadSource" style="padding:4px;background:#0f1117;color:#e0e0e0;border:1px solid #2a2d3a;border-radius:4px;font-size:11px;margin-top:4px;">
+          <option value="ariba">Ariba</option><option value="coupa">Coupa</option><option value="direct">Email / Direct</option>
+        </select>
+        <button class="btn btn-green" onclick="uploadFile()" style="padding:4px 12px;font-size:11px;margin-top:4px;">Add</button>
+        <div id="uploadResult" style="font-size:11px;margin-top:4px;"></div>
+      </div>
+      <!-- demo section hidden for production -->
+    </div>
+    <div class="detail-panel" id="detailPanel">
+      <div class="detail-content">
+        <div class="empty">Select a PO from the queue to review.<br><span style="color:#64748b;font-size:11px;margin-top:6px;display:block;">Enter = Approve | Esc = Cancel/Back</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PROCESSED / CISM BATCH FILES -->
+<div class="tab-panel" id="panel-processed">
+  <div class="xw-section">
+    <h3>Approved POs — CISM Batch Files Ready for P21</h3>
+    <p class="desc">These POs have been reviewed and approved. Download the CISM header + line CSVs, then upload to Azure Blob for P21's scheduled import job.</p>
+    <div class="scroll-table">
+      <table id="procTable">
+        <tr><th>PO #</th><th>Customer</th><th>Source</th><th>Confidence</th><th>Lines</th><th>Reviewed By</th><th>CISM Import Set</th><th>Download</th></tr>
+      </table>
+    </div>
+    <div id="procEmpty" class="empty" style="padding:30px;">No approved POs yet. Approve POs from the Review Queue.</div>
+  </div>
+  <div class="xw-section">
+    <h3>All Processed POs</h3>
+    <p class="desc">Complete history of every PO that came through the system.</p>
+    <div class="scroll-table">
+      <table id="allPOsTable">
+        <tr><th>PO #</th><th>Customer</th><th>Source</th><th>Confidence</th><th>Status</th><th>Lines</th><th>Received</th></tr>
+      </table>
+    </div>
+    <div id="allPOsEmpty" class="empty" style="padding:20px;">Loading...</div>
+  </div>
+</div>
+
+<!-- CISM BATCH -->
+<div class="tab-panel" id="panel-batch">
+  <div class="xw-section">
+    <h3>CISM Batch Pipeline</h3>
+    <p class="desc">As POs are approved, they accumulate into a single CISM batch file. When ready, download and push to Azure Blob for P21 import.</p>
+    <div style="display:flex; gap:16px; margin:16px 0; padding:16px; background:#141620; border-radius:8px; align-items:center;">
+      <div style="text-align:center; flex:1;">
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;">1. Review & Approve</div>
+        <div style="font-size:24px;font-weight:700;color:#4ade80;" id="batchApproved">0</div>
+        <div style="font-size:11px;color:#475569;">POs in batch</div>
+      </div>
+      <div style="font-size:24px;color:#334155;">→</div>
+      <div style="text-align:center; flex:1;">
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;">2. CISM Batch CSV</div>
+        <div style="font-size:24px;font-weight:700;color:#60a5fa;" id="batchLines">0</div>
+        <div style="font-size:11px;color:#475569;">line items</div>
+      </div>
+      <div style="font-size:24px;color:#334155;">→</div>
+      <div style="text-align:center; flex:1;">
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;">3. Azure Blob</div>
+        <div style="font-size:12px;color:#475569;margin-top:4px;">Upload batch to<br>Azure storage</div>
+      </div>
+      <div style="font-size:24px;color:#334155;">→</div>
+      <div style="text-align:center; flex:1;">
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;">4. Local Machine</div>
+        <div style="font-size:12px;color:#475569;margin-top:4px;">Sync to<br>P21 CISM folder</div>
+      </div>
+      <div style="font-size:24px;color:#334155;">→</div>
+      <div style="text-align:center; flex:1;">
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;">5. P21 Import</div>
+        <div style="font-size:12px;color:#475569;margin-top:4px;">CISM scheduled<br>job creates SOs</div>
+      </div>
+    </div>
+    <div style="display:flex; gap:8px; margin-bottom:16px;">
+      <a id="dlBatchHeader" class="btn btn-green" style="text-decoration:none;">Download Header CSV</a>
+      <a id="dlBatchLines" class="btn btn-green" style="text-decoration:none;">Download Lines CSV</a>
+      <button class="btn btn-red" onclick="clearBatch()">Clear Batch (after Azure upload)</button>
+    </div>
+  </div>
+
+  <div class="xw-section">
+    <h3>Batch Header — orderquoteheader</h3>
+    <p class="desc">One row per approved PO. This is the file P21's CISM import reads for SO headers.</p>
+    <div class="scroll-table"><table id="batchHeaderTable"><tr><th>Import Set</th><th>Customer ID</th><th>Customer</th><th>PO #</th><th>Ship-To</th><th>City</th><th>St</th><th>Zip</th><th>Date</th></tr></table></div>
+    <div id="batchHeaderEmpty" class="empty" style="padding:20px;">Batch is empty. Approve POs from the Review Queue to build the batch.</div>
+  </div>
+
+  <div class="xw-section">
+    <h3>Batch Lines — orderquoteline</h3>
+    <p class="desc">One row per line item. Each links to its header via Import Set Number.</p>
+    <div class="scroll-table"><table id="batchLineTable"><tr><th>Import Set</th><th>Line</th><th>Item ID</th><th>Qty</th><th>UOM</th><th>Price</th><th>Description</th><th>Disposition</th></tr></table></div>
+    <div id="batchLineEmpty" class="empty" style="padding:20px;">No lines yet.</div>
+  </div>
+</div>
+
+<!-- UPLOAD PO -->
+<div class="tab-panel" id="panel-upload">
+  <div class="upload-zone">
+    <h3 style="margin-bottom:12px;">Upload PO for Processing</h3>
+    <p style="color:#64748b; font-size:13px; margin-bottom:16px;">Upload a cXML, PDF, or CSV purchase order. The agent will match the customer and items against the P21 crosswalk.</p>
+    <input type="file" id="fileUpload" accept=".xml,.pdf,.csv"><br>
+    <select id="uploadSource" style="margin-top:8px;">
+      <option value="ariba">Ariba</option>
+      <option value="coupa">Coupa</option>
+      <option value="direct">Direct / Email</option>
+    </select>
+    <button class="btn btn-green" onclick="uploadFile()" style="margin-left:8px;">Process</button>
+    <div id="uploadResult" style="margin-top:16px;"></div>
+  </div>
+</div>
+
+<!-- CROSSWALK -->
+<div class="tab-panel" id="panel-crosswalk">
+  <div class="xw-section">
+    <h3>Customer Crosswalk <span class="count" id="xwCustCount"></span></h3>
+    <p class="desc">Maps ship-to names + zip codes to P21 customer IDs. Learns from every approved PO.</p>
+    <div class="scroll-table"><table id="custXWTable"><tr><th>P21 ID</th><th>Customer Name</th><th>Ship-To</th><th>Zip</th><th>Source</th><th>Method</th><th>Orders</th><th style="width:80px;">Action</th></tr></table></div>
+    <div id="custXWEmpty" class="empty" style="padding:20px;">Build crosswalk to populate</div>
+  </div>
+
+  <div class="xw-section">
+    <h3>Customer-Item Crosswalk <span class="count" id="xwItemCount"></span></h3>
+    <p class="desc">Maps each customer's part numbers to P21 items (inv_mast_uid). This is the core matching table.</p>
+    <div class="scroll-table"><table id="itemXWTable"><tr><th>Customer ID</th><th>Customer Part #</th><th>P21 Item UID</th><th>Description</th><th>UOM</th><th>Avg Price</th><th>Orders</th></tr></table></div>
+    <div id="itemXWEmpty" class="empty" style="padding:20px;">Build crosswalk to populate</div>
+  </div>
+
+  <div class="xw-section">
+    <h3>PO History <span class="count" id="xwPOCount"></span></h3>
+    <p class="desc">Links customer PO numbers to P21 Sales Order numbers. Used for duplicate detection.</p>
+    <div class="scroll-table"><table id="poHistTable"><tr><th>Customer ID</th><th>Customer PO #</th><th>P21 SO #</th><th>Order Date</th><th>Ship-To</th><th>Status</th></tr></table></div>
+    <div id="poHistEmpty" class="empty" style="padding:20px;">Build crosswalk to populate</div>
+  </div>
+
+  <div class="xw-section">
+    <h3>Item Master <span class="count" id="xwMasterCount"></span></h3>
+    <p class="desc">P21 inventory items — fallback matching when customer-specific part# lookup fails.</p>
+    <div class="scroll-table"><table id="masterTable"><tr><th>UID</th><th>Description</th><th>UOM</th><th>Product Group</th><th>Supplier</th></tr></table></div>
+    <div id="masterEmpty" class="empty" style="padding:20px;">Build crosswalk to populate</div>
+  </div>
+
+  <div class="xw-section">
+    <h3>Dynamics Quotes (Active) <span class="count" id="xwQuoteCount"></span></h3>
+    <p class="desc">Active LVP quotes from Dynamics 365 CRM.</p>
+    <div class="scroll-table"><table id="quoteTable"><tr><th>Quote #</th><th>Name</th><th>Customer</th><th>Contact</th><th>Price</th><th>Terms</th><th>Est Completion</th></tr></table></div>
+    <div id="quoteEmpty" class="empty" style="padding:20px;">No quote data loaded.</div>
+  </div>
+
+  <div class="xw-section">
+    <h3>Quote-to-PO Linkage <span class="count" id="xwLinkCount"></span></h3>
+    <p class="desc">Cases that link a Dynamics quote to a customer PO# and EnPro order#. This is how quotes connect to sales orders.</p>
+    <div class="scroll-table"><table id="linkTable"><tr><th>Case #</th><th>Customer PO #</th><th>EnPro Order #</th><th>Customer</th><th>Case Title</th><th>Created</th></tr></table></div>
+    <div id="linkEmpty" class="empty" style="padding:20px;">No PO linkage data loaded.</div>
+  </div>
+</div>
+
+<!-- CISM SCHEMA -->
+<div class="tab-panel" id="panel-cism">
+  <div class="xw-section">
+    <h3>P21 Order/Quote Import — Header Schema</h3>
+    <p class="desc">These are the columns in the CISM batch import CSV that creates a Sales Order header in P21. Required fields are highlighted.</p>
+    <div class="scroll-table"><table id="cismHeaderTable"><tr><th>#</th><th>Field</th><th>Type</th><th>Req</th><th>Max</th><th>Description</th></tr></table></div>
+  </div>
+  <div class="xw-section">
+    <h3>P21 Order/Quote Import — Line Schema</h3>
+    <p class="desc">These columns create each SO line item. The Item ID must match a P21 inventory item (resolved via the customer-item crosswalk).</p>
+    <div class="scroll-table"><table id="cismLineTable"><tr><th>#</th><th>Field</th><th>Type</th><th>Req</th><th>Max</th><th>Description</th></tr></table></div>
+  </div>
+</div>
+
+<!-- PIPELINE -->
+<div class="tab-panel" id="panel-pipeline">
+  <h3 style="margin-bottom:16px;">PO-to-SO Processing Pipeline</h3>
+  <div class="pipe-step"><div class="pipe-num">1</div><div><div class="pipe-title">Email Intake</div><div class="pipe-desc">Customers send POs to <b>orders@enproinc.com</b> as email with <b>PDF attachment</b>. The agent polls this inbox via Microsoft Graph API. Ariba and Coupa POs also arrive here, sometimes as cXML attachments.</div></div></div>
+  <div class="pipe-step"><div class="pipe-num">2</div><div><div class="pipe-title">Parse PO</div><div class="pipe-desc"><b>PDF:</b> Azure Document Intelligence extracts PO#, ship-to, line items, quantities, prices from the PDF.<br><b>cXML:</b> Native XML parsing for Ariba/Coupa OrderRequest format.<br><b>CSV:</b> Direct column mapping for structured imports.</div></div></div>
+  <div class="pipe-step"><div class="pipe-num">3</div><div><div class="pipe-title">Customer Match</div><div class="pipe-desc">Match the ship-to name + zip code to a P21 customer_id using the <b>Customer Crosswalk</b> (4,880 entries). Priority: learned exact match > name+zip exact > fuzzy address > PO# pattern.</div></div></div>
+  <div class="pipe-step"><div class="pipe-num">4</div><div><div class="pipe-title">Item Match</div><div class="pipe-desc">For each line item, match the customer's part number to a P21 item using the <b>Customer-Item Crosswalk</b> (22,675 entries). This table maps what each specific customer calls their parts to EnPro's P21 item IDs.</div></div></div>
+  <div class="pipe-step"><div class="pipe-num">5</div><div><div class="pipe-title">Confidence Score</div><div class="pipe-desc">4-dimension scoring:<br>
+    <b>Customer (30%)</b> — did we identify who this is?<br>
+    <b>Ship-to (15%)</b> — do we know this delivery address?<br>
+    <b>Items (45%)</b> — did every line item match a P21 product?<br>
+    <b>Duplicate (10%)</b> — is this a new PO or a re-send?<br>
+    <span style="color:#4ade80;">GREEN = auto-approve</span> | <span style="color:#fbbf24;">YELLOW = Brittany reviews</span> | <span style="color:#f87171;">RED = manual entry needed</span></div></div></div>
+  <div class="pipe-step"><div class="pipe-num">6</div><div><div class="pipe-title">CISM SO Generation</div><div class="pipe-desc">For green/yellow POs, generate a <b>P21 Order/Quote Import CSV</b> matching the CISM batch schema (orderquoteheader + orderquoteline format). This CSV gets picked up by P21's scheduled import job to create the Sales Order.</div></div></div>
+  <div class="pipe-step"><div class="pipe-num">7</div><div><div class="pipe-title">Learning Loop</div><div class="pipe-desc">Every time a PO is approved (automatically or by Brittany), the system remembers:<br>
+    <b>Customer:</b> "Ship-to 'Waupaca Foundry' at zip 47586 = P21 customer 208672" — instant match next time.<br>
+    <b>Items:</b> "Customer 208672 calls part PH0260 = P21 inv_mast_uid 7931" — remembered per customer.<br>
+    <b>PO Link:</b> "PO# 4500867075 = customer 208672" — catches duplicates, confirms identity.<br>
+    <span style="color:#64748b;">Day 1: mostly yellow/red (learning). Month 1: mostly green (automated).</span></div></div></div>
+</div>
+
+<!-- P21 PAYLOADS -->
+<div class="tab-panel" id="panel-payloads">
+  <div class="xw-section">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px;">
+      <h3 style="margin:0;">P21 Transaction API Payloads</h3>
+      <button id="preflightBtn" class="btn btn-gray" style="padding:6px 14px;font-size:12px;" disabled onclick="runPreflight()">Run Batch Preflight</button>
+      <button id="batchDownloadBtn" class="btn btn-blue" style="padding:6px 14px;font-size:12px;" disabled onclick="downloadBatchPayload()">Download Batch JSON</button>
+      <span id="preflightHint" style="font-size:11px;color:#64748b;display:none;">⚠ Preflight recommended before download</span>
+    </div>
+    <p class="desc" style="margin-top:6px;">Check rows, then click <strong>Run Batch Preflight</strong> to see what will be included before downloading. Use <strong>Download Batch JSON</strong> to export.</p>
+    <div id="batchNotice" style="display:none;margin-bottom:10px;padding:8px 12px;border-radius:6px;font-size:12px;background:#1a1d27;border:1px solid #2a2d3a;color:#a5f3fc;"></div>
+    <div id="payloadsEmpty" class="empty" style="display:none;">No POs found.</div>
+    <div class="scroll-table">
+      <table id="payloadsTable" style="display:none;">
+        <thead><tr>
+          <th style="width:32px;"><input type="checkbox" id="selectAllPayloads" title="Select all" onchange="toggleSelectAll(this)"></th>
+          <th>PO No</th><th>Intake ID</th><th>Customer</th><th>Lines</th><th>Confidence</th><th>Status</th><th>Validation</th><th>Created</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="payloadsTbody"></tbody>
+      </table>
+    </div>
+    <div id="preflightPanel" class="preflight-panel" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- OUTBOUND SYNC -->
+<div class="tab-panel" id="panel-outbound">
+  <div class="xw-section">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px;">
+      <h3 style="margin:0;">Outbound Sync — P21 Invoice Feedback to Ariba/Coupa</h3>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-gray" style="padding:6px 14px;font-size:12px;" onclick="loadOutbound()">↻ Refresh</button>
+        <a class="btn btn-gray" style="padding:6px 14px;font-size:12px;text-decoration:none;" href="${API}/api/v1/outbound/history/download" download>Download History CSV</a>
+      </div>
+    </div>
+    <p class="desc" style="margin-top:6px;">
+      Foundation queue for syncing P21 invoice data back to source procurement systems.
+      <strong style="color:#fbbf24;">Mock send only</strong> — no live credentials configured yet.
+      Lifecycle: <span style="color:#64748b;">Pending</span> → <strong style="color:#22d3ee;">Prepare</strong> → <strong style="color:#22d3ee;">Ready</strong> → <strong style="color:#4ade80;">Sent</strong>.
+    </p>
+    <div id="outboundEmpty" class="empty" style="display:none;padding:30px;">No outbound records yet. Use "Prepare from Approved POs" below to create one.</div>
+    <div class="scroll-table">
+      <table id="outboundTable" style="display:none;">
+        <thead><tr>
+          <th>PO No</th><th>Source</th><th>Invoice No</th><th>Amount</th><th>Customer ID</th><th>Status</th><th>Updated</th><th>Last Error</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="outboundTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="xw-section" style="margin-top:16px;">
+    <h3>Prepare from Approved POs</h3>
+    <p class="desc">Choose an approved PO to build its outbound sync record and payload. Safe to re-run — idempotent.</p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <select id="outboundPoSelect" style="padding:8px;background:#141620;color:#e0e0e0;border:1px solid #2a2d3a;border-radius:4px;min-width:300px;font-size:13px;">
+        <option value="">— Select approved PO —</option>
+      </select>
+      <button class="btn btn-blue" onclick="prepareSelected()">Prepare Outbound Record</button>
+      <span id="prepareStatus" style="font-size:12px;color:#94a3b8;"></span>
+    </div>
+  </div>
+</div>
+
+<!-- AUDIT TRAIL -->
+<div class="tab-panel" id="panel-audit">
+  <h3 style="margin-bottom:16px;">Audit Trail</h3>
+  <div id="auditContainer">
+    <div class="empty">Loading audit log...</div>
+  </div>
+</div>
+
+<!-- INVOICES -->
+<div class="tab-panel" id="panel-invoices">
+  <div style="text-align:center;padding:60px 20px;">
+    <div style="font-size:48px;margin-bottom:16px;">🧾</div>
+    <h2 style="color:#64748b;margin-bottom:8px;">Invoice Sync — Coming Soon</h2>
+    <p style="color:#475569;max-width:500px;margin:0 auto;line-height:1.6;">
+      This module will pull invoices from P21 after SO fulfillment and send them to Coupa as cXML.
+      <br><br>
+      <strong>Planned flow:</strong> P21 creates invoice → Agent pulls it → Builds Coupa cXML → POST to Coupa
+    </p>
+    <div style="margin-top:24px;padding:12px 20px;background:#1a1d27;border:1px solid #2a2d3a;border-radius:8px;display:inline-block;">
+      <span style="color:#475569;font-size:12px;">Status: </span>
+      <span style="color:#fbbf24;font-weight:600;font-size:12px;">🔒 Disabled — Admin configuration required</span>
+    </div>
+  </div>
+</div>
+
+<!-- JSON VIEWER MODAL -->
+<div id="jsonModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;overflow:auto;padding:24px;">
+  <div style="background:#1a1d27;border:1px solid #2a2d3a;border-radius:10px;max-width:900px;margin:0 auto;padding:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div>
+        <span style="font-weight:700;font-size:15px;color:#fff;" id="modalTitle">P21 Payload</span>
+        <span style="font-size:12px;color:#64748b;margin-left:12px;" id="modalFilename"></span>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <a id="modalDownloadLink" class="btn btn-gray" style="font-size:12px;padding:6px 14px;text-decoration:none;" download>Download</a>
+        <button class="btn btn-gray" style="font-size:12px;padding:6px 14px;" onclick="closeModal()">Close</button>
+      </div>
+    </div>
+    <pre id="jsonViewer" style="background:#0f1117;border:1px solid #2a2d3a;border-radius:6px;padding:16px;font-size:12px;line-height:1.6;overflow-x:auto;color:#a5f3fc;white-space:pre-wrap;word-break:break-word;max-height:60vh;overflow-y:auto;"></pre>
+  </div>
+</div>
+
+<!-- BULK APPROVE MODAL -->
+<div id="bulkApproveModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;overflow:auto;padding:24px;">
+  <div style="background:#1a1d27;border:1px solid #2a2d3a;border-radius:10px;max-width:500px;margin:0 auto;padding:24px;">
+    <div style="font-weight:700;font-size:15px;color:#fff;margin-bottom:12px;">Approve All Green POs</div>
+    <div style="color:#94a3b8;font-size:13px;margin-bottom:16px;">The following <span id="bulkCount" style="color:#4ade80;font-weight:600;"></span> POs will be approved:</div>
+    <div id="bulkPoList" style="background:#0f1117;border:1px solid #2a2d3a;border-radius:6px;padding:12px;font-size:12px;color:#e0e0e0;max-height:200px;overflow-y:auto;margin-bottom:16px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-gray" onclick="closeBulkModal()" style="padding:6px 14px;font-size:12px;">Cancel</button>
+      <button class="btn btn-green" onclick="confirmBulkApprove()" style="padding:6px 14px;font-size:12px;">Confirm Approve</button>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+const API = '';
+let queue = [];
+let currentFilter = 'all';
+let selectedId = null;
+
+async function loadDemoData() {
+  try {
+    const resp = await fetch(`${API}/api/v1/demo/load`, {method:'POST', headers:{'Content-Type':'application/json', 'X-Actor-Name': localStorage.getItem('actor_name') || 'system'}});
+    const data = await resp.json();
+    showToast(`Demo loaded: ${data.count} POs`, 'success');
+    loadQueue(currentFilter); loadStats();
+  } catch(e) { showToast('Error loading demo: ' + e.message, 'error'); }
+}
+
+async function loadStats() {
+  try {
+    const r = await fetch(`${API}/api/v1/stats`);
+    const d = await r.json();
+    document.getElementById('sTotal').textContent = d.total || 0;
+    document.getElementById('sGreen').textContent = d.green || 0;
+    document.getElementById('sPending').textContent = d.pending || 0;
+    document.getElementById('sCustXW').textContent = d.crosswalk?.customers || 0;
+    document.getElementById('sItemXW').textContent = d.crosswalk?.items || 0;
+    document.getElementById('queueBadge').textContent = d.pending || 0;
+  } catch(e) { console.error('Stats:', e); }
+}
+
+function showToast(msg, type='info', duration=4000) {
+  const container = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = 'toast ' + type;
+  t.textContent = msg;
+  container.appendChild(t);
+  setTimeout(() => { t.classList.add('hiding'); setTimeout(() => t.remove(), 200); }, duration);
+}
+
+async function checkDisk() {
+  try {
+    const data = await (await fetch(`${API}/health`)).json();
+    const disk = data.disk;
+    if (!disk) return;
+    const pct = Math.round((disk.used_mb / disk.total_mb) * 100);
+    const banner = document.getElementById('diskWarning');
+    if (pct > 90) {
+      banner.style.display = 'block';
+      banner.style.background = '#3b1111';
+      banner.style.color = '#f87171';
+      banner.textContent = '\u26A0 Disk usage: ' + pct + '%';
+    } else if (pct > 80) {
+      banner.style.display = 'block';
+      banner.style.background = '#2d1b00';
+      banner.style.color = '#fbbf24';
+      banner.textContent = '\u26A0 Disk usage: ' + pct + '%';
+    } else {
+      banner.style.display = 'none';
+      banner.textContent = '';
+    }
+    // Update P21 status dot
+    const p21Status = data.services?.p21_api || 'not_configured';
+    const p21Dot = document.getElementById('p21Dot');
+    const p21Label = document.getElementById('p21StatusDot');
+    if (p21Dot) {
+      const colors = {
+        connected: '#4ade80',
+        auth_failed: '#fbbf24',
+        unreachable: '#f87171',
+        not_configured: '#64748b',
+        ready: '#4ade80',
+      };
+      p21Dot.style.background = colors[p21Status] || '#64748b';
+      p21Label.title = 'P21 API: ' + p21Status.replace(/_/g, ' ');
+    }
+  } catch(e) { console.error('Disk check failed:', e); }
+}
+
+async function loadQueue(filter) {
+  try {
+    const url = filter && filter !== 'all' ? `${API}/api/v1/review/queue?confidence=${filter}` : `${API}/api/v1/review/queue`;
+    queue = await (await fetch(url)).json();
+    renderQueue();
+  } catch(e) { document.getElementById('poList').innerHTML = '<div class="empty" style="padding:20px;">Error loading</div>'; }
+}
+
+function isReadyToApprove(po) {
+  if (po.confidence !== 'green') return false;
+  const h = po.header || {};
+  if (!h.customer_id_p21) return false;
+  const lines = po.lines || [];
+  if (!lines.length) return false;
+  return lines.every(l => l.item_id_p21 && String(l.item_id_p21).trim() !== '');
+}
+
+function getMissingReason(po) {
+  const h = po.header || {};
+  if (!h.customer_id_p21) return 'Missing customer mapping';
+  const lines = po.lines || [];
+  if (!lines.length) return 'No line items';
+  const unmapped = lines.filter(l => !l.item_id_p21 || String(l.item_id_p21).trim() === '');
+  if (unmapped.length) return `${unmapped.length} unmapped item${unmapped.length > 1 ? 's' : ''}`;
+  if (po.confidence !== 'green') return `Confidence too low (${po.confidence})`;
+  return null;
+}
+
+function renderPoRow(po) {
+  const srcBadge = po.source === 'ariba' ? '<span class="src-tag ariba">Ariba</span>' : 
+                   po.source === 'coupa' ? '<span class="src-tag coupa">Coupa</span>' : 
+                   '<span class="src-tag direct">Email</span>';
+  const confColor = po.confidence==='red'?'#f87171':po.confidence==='yellow'?'#fbbf24':'#4ade80';
+  return `<div class="po-item ${selectedId === po.intake_id ? 'selected' : ''}"
+       onclick="selectPO('${po.intake_id}')" tabindex="0"
+       onkeydown="if(event.key==='Enter')selectPO('${po.intake_id}')">
+    <div><span class="dot ${po.confidence}"></span><span class="po-num">${po.po_number || 'Unknown'}</span>${srcBadge}</div>
+    <div class="po-meta">${po.customer_p21 || po.ship_to || 'Unknown customer'}</div>
+    <div style="font-size:11px;color:${confColor};margin-top:2px;">${po.reason || ''}</div>
+  </div>`;
+}
+
+function renderQueue() {
+  const el = document.getElementById('poList');
+  if (!queue.length) {
+    el.innerHTML = '<div class="empty" style="padding:30px;">No POs pending review. Pipeline is fully automated.</div>';
+    updateBulkApproveBtn();
+    return;
+  }
+  const filtered = currentFilter === 'all' ? queue : queue.filter(po => po.confidence === currentFilter);
+  const needsReview = filtered.filter(po => !isReadyToApprove(po));
+  const readyToApprove = filtered.filter(po => isReadyToApprove(po));
+  const nrRows = needsReview.length ? needsReview.map(renderPoRow).join('') : '<div style="padding:10px 16px;font-size:12px;color:#334155;font-style:italic;">None in this filter</div>';
+  const raRows = readyToApprove.length ? readyToApprove.map(renderPoRow).join('') : '<div style="padding:10px 16px;font-size:12px;color:#334155;font-style:italic;">None in this filter</div>';
+  el.innerHTML =
+    `<div class="swim-lane-header needs-review"><span>Needs Review</span><span class="swim-count">${needsReview.length}</span></div>` +
+    nrRows +
+    `<div class="swim-lane-header ready-to-approve"><span>Ready to Approve</span><span class="swim-count">${readyToApprove.length}</span></div>` +
+    raRows;
+  updateBulkApproveBtn();
+}
+
+function updateBulkApproveBtn() {
+  const greenPending = queue.filter(po => po.confidence === 'green' && po.status !== 'approved');
+  const btn = document.getElementById('bulkApproveBtn');
+  btn.textContent = `Approve All Green (${greenPending.length})`;
+  btn.disabled = greenPending.length === 0;
+  btn.style.opacity = greenPending.length === 0 ? '0.4' : '1';
+  btn.style.cursor = greenPending.length === 0 ? 'not-allowed' : 'pointer';
+}
+
+function openBulkModal() {
+  const greenPending = queue.filter(po => po.confidence === 'green' && po.status !== 'approved');
+  if (!greenPending.length) return;
+  document.getElementById('bulkCount').textContent = greenPending.length;
+  document.getElementById('bulkPoList').innerHTML = greenPending.map(po => `<div>• ${po.po_number || 'Unknown'}</div>`).join('');
+  document.getElementById('bulkApproveModal').style.display = 'block';
+}
+
+function closeBulkModal() {
+  document.getElementById('bulkApproveModal').style.display = 'none';
+}
+
+async function confirmBulkApprove() {
+  closeBulkModal();
+  try {
+    const resp = await fetch(`${API}/api/v1/review/bulk-approve`, {method:'POST', headers:{'Content-Type':'application/json', 'X-Actor-Name': localStorage.getItem('actor_name') || 'system'}});
+    const data = await resp.json();
+    showToast(`Bulk approve complete! Approved: ${data.approved_count}, Skipped: ${data.skipped_count}`, 'success', 6000);
+    loadQueue(currentFilter); loadStats(); loadProcessed(); loadPayloads();
+    selectedId = null;
+    document.getElementById('detailPanel').innerHTML = '<div class="empty">Select a PO from the queue to review</div>';
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+document.getElementById('bulkApproveModal').addEventListener('click', function(e) {
+  if (e.target === this) closeBulkModal();
+});
+
+function selectPO(id) {
+  selectedId = id;
+  renderQueue();
+  const po = queue.find(p => p.intake_id === id);
+  if (!po) return;
+  const h = po.header || {};
+  const lines = po.lines || [];
+
+  const panel = document.getElementById('detailPanel');
+  panel.scrollTop = 0;
+
+  const eligible = isReadyToApprove(po);
+  const missingReason = getMissingReason(po);
+  const approveDisabled = !eligible ? `disabled style="opacity:0.4;cursor:not-allowed;" title="${missingReason}"` : '';
+  const pv = po.payload_validation || {};
+  const pvStatus = pv.status || 'unknown';
+  const pvErrors = pv.errors || [];
+  const pvBadge = `<span class="badge-valid ${pvStatus}">${pvStatus === 'batch_ready' ? 'Batch Ready' : pvStatus === 'needs_fix' ? 'Needs Fix' : 'Not Validated'}</span>`;
+
+  panel.innerHTML =
+    `<div class="sticky-action-bar">` +
+      `<div class="po-summary-quick">` +
+        `<span style="font-weight:700;font-size:14px;color:#fff;">PO ${po.po_number || '?'}</span>` +
+        `<span class="badge-conf ${po.confidence}">${(po.confidence||'').toUpperCase()}</span>` +
+        `<span style="color:#64748b;font-size:12px;">${po.source||''}</span>` +
+        `<span style="color:#475569;font-size:12px;">· ${lines.length} lines</span>` +
+        (h.customer_name_p21 ? `<span style="color:#94a3b8;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">· ${h.customer_name_p21}</span>` : `<span style="color:#f87171;font-size:12px;">· customer unmapped</span>`) +
+        `<span style="margin-left:4px;">${pvBadge}</span>` +
+      `</div>` +
+      `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">` +
+        `<button class="btn btn-blue" onclick="editPO('${po.intake_id}')" style="padding:6px 14px;">Edit PO</button>` +
+        `<button class="btn btn-green" ${approveDisabled} onclick="${eligible ? `approvePO('${po.intake_id}')` : ''}" style="padding:6px 14px;">Approve</button>` +
+        `<button class="btn btn-red" onclick="rejectPO('${po.intake_id}')" style="padding:6px 14px;">Reject</button>` +
+        `<a class="btn btn-gray" href="${API}/api/v1/p21/payload/${po.intake_id}/download" download style="padding:6px 14px;text-decoration:none;">Download P21 Payload</a>` +
+        (po.review_status === 'approved' ? `<button class="btn btn-green" onclick="submitP21Single('${po.intake_id}')" style="padding:6px 14px;background:#059669;">Submit to P21</button>` : '') +
+        (missingReason && !eligible ? `<span style="color:#f87171;font-size:11px;">⚠ ${missingReason}</span>` : '') +
+      `</div>` +
+    `</div>` +
+    `<div class="detail-content">` +
+      `<div style="color:#94a3b8; font-size:13px; margin-bottom:12px;">${po.reason || ''}</div>` +
+      (pvErrors.length ? `<div class="validation-errors"><div class="ve-title">Payload validation errors</div>${pvErrors.map(e=>`<div class="ve-item"><span class="ve-code">${e.code}</span>${e.message}</div>`).join('')}</div>` : '') +
+      `<div class="meta-grid">` +
+        `<div class="meta-box"><div class="lbl">Customer (Ship-To)</div><div class="val">${h.ship2_name || po.ship_to || '-'}</div></div>` +
+        `<div class="meta-box"><div class="lbl">P21 Customer</div><div class="val ${h.customer_id_p21 ? '' : 'warn'}">${h.customer_name_p21 || 'NOT MATCHED'} ${h.customer_id_p21 ? '('+h.customer_id_p21+')' : ''}</div></div>` +
+        `<div class="meta-box"><div class="lbl">Match</div><div class="val">${h.customer_match_method || '-'} (${(h.customer_match_score||0).toFixed?.(2) || '0'})</div></div>` +
+        `<div class="meta-box"><div class="lbl">Address</div><div class="val">${h.ship2_add1 || ''}, ${h.ship2_city || ''} ${h.ship2_state || ''} ${h.ship2_zip || ''}</div></div>` +
+        `<div class="meta-box"><div class="lbl">Source</div><div class="val">${po.source || '-'}</div></div>` +
+        `<div class="meta-box"><div class="lbl">P21 SO #</div><div class="val" style="color:${po.p21_so_number?'#4ade80':'#94a3b8'};">${po.p21_so_number || 'Not submitted'}</div></div>` +
+        `<div class="meta-box"><div class="lbl">Received</div><div class="val">${po.received ? new Date(po.received).toLocaleString() : '-'}</div></div>` +
+      `</div>` +
+      `<h3 style="margin:16px 0 8px;">Line Items (${lines.length})</h3>` +
+      `<table>` +
+        `<tr><th>#</th><th>Customer Part #</th><th>Description</th><th>Qty</th><th>Price</th><th>P21 Item</th><th>Match</th></tr>` +
+        lines.map((l,i) =>
+          `<tr>` +
+            `<td>${l.line_no || i+1}</td>` +
+            `<td>${l.supplier_part_id || '-'}</td>` +
+            `<td>${(l.item_description||'').substring(0,40)}</td>` +
+            `<td>${l.qty_ordered || 0}</td>` +
+            `<td>$${(l.unit_price||0).toFixed?.(2) || '0.00'}</td>` +
+            `<td>${l.item_id_p21 || '<span style="color:#f87171">UNMAPPED</span>'}</td>` +
+            `<td>${matchLabel(l.crosswalk_match_score)}</td>` +
+          `</tr>`
+        ).join('') +
+      `</table>` +
+    `</div>`;
+}
+
+function matchLabel(score) {
+  const s = score || 0;
+  if (s >= 1.0) return '<span class="score-pill hi">EXACT</span>';
+  if (s >= 0.9) return '<span class="score-pill hi">MATCHED</span>';
+  if (s >= 0.6) return '<span class="score-pill mid">FUZZY — verify</span>';
+  if (s > 0) return '<span class="score-pill lo">GUESS — review</span>';
+  return '<span class="score-pill lo">UNMAPPED</span>';
+}
+
+async function approvePO(id) {
+  const reviewer = prompt('Reviewer name:', 'Brittany');
+  if (!reviewer) return;
+  try {
+    const resp = await fetch(`${API}/api/v1/review/po/${id}/approve`, { method:'POST', headers:{'Content-Type':'application/json', 'X-Actor-Name': localStorage.getItem('actor_name') || 'system'}, body:JSON.stringify({reviewer, notes:''}) });
+    const ar = await resp.json();
+    const pvStatus = ar.payload_validation?.status === 'batch_ready' ? 'Batch Ready ✓' : 'Needs Fix — ' + (ar.payload_validation?.errors||[]).map(e=>e.message||e.code).join('; ');
+    showToast(`Approved — ${pvStatus}`, 'success');
+    _preflightRan = false;
+    loadQueue(currentFilter); loadStats(); loadPayloads();
+    selectedId = null;
+    document.getElementById('detailPanel').innerHTML = '<div class="empty">Select a PO from the queue to review</div>';
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function rejectPO(id) {
+  const reason = prompt('Rejection reason:');
+  if (!reason) return;
+  try {
+    await fetch(`${API}/api/v1/review/po/${id}/reject`, { method:'POST', headers:{'Content-Type':'application/json', 'X-Actor-Name': localStorage.getItem('actor_name') || 'system'}, body:JSON.stringify({reviewer:'reviewer', reason}) });
+    showToast('PO rejected.', 'info');
+    loadQueue(currentFilter); loadStats();
+    selectedId = null;
+    document.getElementById('detailPanel').innerHTML = '<div class="empty">Select a PO from the queue to review</div>';
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function submitP21Single(id) {
+  const reviewer = prompt('Submitter name:', 'Brittany');
+  if (!reviewer) return;
+  try {
+    const resp = await fetch(`${API}/api/v1/p21/submit/${id}`, { method:'POST', headers:{'Content-Type':'application/json', 'X-Actor-Name': localStorage.getItem('actor_name') || 'system'}, body:JSON.stringify({reviewer, notes:''}) });
+    const data = await resp.json();
+    if (!resp.ok) {
+      showToast('P21 submit failed: ' + (data.detail?.message || data.detail || JSON.stringify(data)), 'error', 6000);
+      return;
+    }
+    if (data.p21_so_number) {
+      showToast(`P21 Sales Order created! SO #${data.p21_so_number}`, 'success', 6000);
+    } else {
+      showToast('P21 submit completed but no SO number returned.', 'warn', 6000);
+    }
+    loadQueue(currentFilter); loadProcessed(); loadPayloads();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+let _editCustItems = [];
+
+async function searchCustomers(q) {
+  const box = document.getElementById('custSearchResults');
+  if (!q || q.length < 2) { box.style.display='none'; box.innerHTML=''; return; }
+  try {
+    const data = await (await fetch(`${API}/api/v1/lookup/customers?q=${encodeURIComponent(q)}&limit=20`)).json();
+    if (!data.length) { box.style.display='none'; return; }
+    box.innerHTML = data.map(c => `
+      <div class="cust-result" onclick="selectCustomer('${c.p21_customer_id}', '${c.p21_customer_name.replace(/'/g,"\\'")}', '${(c.ship2_name||'').replace(/'/g,"\\'")}', '${(c.ship2_zip||'').replace(/'/g,"\\'")}')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #1e2030;color:#e2e8f0;">
+        <div style="font-weight:600;">${c.p21_customer_name}</div>
+        <div style="font-size:11px;color:#64748b;">ID: ${c.p21_customer_id}${c.ship2_name ? ' · '+c.ship2_name : ''}${c.ship2_zip ? ' · '+c.ship2_zip : ''}</div>
+      </div>`).join('');
+    box.style.display='block';
+  } catch(e) { box.style.display='none'; }
+}
+
+function selectCustomer(id, name, ship2, zip) {
+  document.getElementById('editCustId').value = id;
+  document.getElementById('editCustName').value = name;
+  document.getElementById('editShipTo').value = ship2;
+  document.getElementById('editShipToVisible').value = ship2;
+  document.getElementById('custSearchInput').value = name + ' (' + id + ')';
+  document.getElementById('custSearchResults').style.display='none';
+  const disp = document.getElementById('editCustDisplay');
+  if (disp) disp.innerHTML = `<strong>${name}</strong><br><span style="color:#64748b;font-size:11px;">ID: ${id}${ship2 ? ' · '+ship2 : ''}</span>`;
+  // Reload item dropdowns for this customer
+  loadEditCustomerItems(id);
+}
+
+async function loadEditCustomerItems(customerId) {
+  if (!customerId) return;
+  try {
+    _editCustItems = await (await fetch(`${API}/api/v1/lookup/customer-items/${customerId}?limit=200`)).json();
+  } catch(e) { _editCustItems = []; }
+  const opts = _editCustItems.map(i =>
+    `<option value="${i.p21_inv_mast_uid}" data-desc="${i.p21_item_desc||''}" data-uom="${i.unit_of_measure||'EA'}" data-price="${i.unit_price_last||''}">${i.customer_part_number} — ${(i.p21_item_desc||'').substring(0,30)} (${i.seen_count}x)</option>`
+  ).join('');
+  document.querySelectorAll('[id^="editItem_"]').forEach(sel => {
+    const currentVal = sel.value;
+    const preserveOpt = sel.querySelector('option:first-child');
+    sel.innerHTML = (preserveOpt ? preserveOpt.outerHTML : '') + opts;
+    sel.value = currentVal;
+  });
+  // Also update the hidden select options for any item search inputs that exist
+  document.querySelectorAll('[id^="itemSearchInput_"]').forEach(input => {
+    const idx = input.id.split('_')[1];
+    const hiddenSel = document.getElementById('editItem_' + idx);
+    if (hiddenSel) {
+      const currentVal = hiddenSel.value;
+      const preserveOpt = hiddenSel.querySelector('option:first-child');
+      hiddenSel.innerHTML = (preserveOpt ? preserveOpt.outerHTML : '') + opts;
+      hiddenSel.value = currentVal;
+    }
+  });
+  // Update the count label
+  const lbl = document.getElementById('editItemCount');
+  if (lbl) lbl.textContent = _editCustItems.length + ' items in this customer\'s history';
+}
+
+async function editPO(id) {
+  const po = queue.find(p => p.intake_id === id);
+  if (!po) return;
+  const h = po.header || {};
+  const lines = po.lines || [];
+  const custId = h.customer_id_p21 || '';
+
+  // Load customer's item history for search
+  let custItems = [];
+  if (custId) {
+    try { custItems = await (await fetch(`${API}/api/v1/lookup/customer-items/${custId}?limit=200`)).json(); } catch(e) {}
+  }
+  _editCustItems = custItems;
+
+  // Build hidden select options HTML (for fallback / suggestion acceptance)
+  const itemOptions = custItems.map(i =>
+    `<option value="${i.p21_inv_mast_uid}" data-desc="${i.p21_item_desc||''}" data-uom="${i.unit_of_measure||'EA'}" data-price="${i.unit_price_last||''}">${i.customer_part_number} — ${(i.p21_item_desc||'').substring(0,30)} (${i.seen_count}x)</option>`
+  ).join('');
+
+  // Fetch suggestions for red/yellow POs
+  let suggestionData = null;
+  if (po.confidence === 'red' || po.confidence === 'yellow') {
+    try {
+      const resp = await fetch(`${API}/api/v1/suggest/mappings/${id}`, {method:'POST', headers:{'Content-Type':'application/json', 'X-Actor-Name': localStorage.getItem('actor_name') || 'system'}});
+      if (resp.ok) suggestionData = await resp.json();
+    } catch(e) { console.error('Suggestion fetch failed:', e); }
+  }
+
+  const overwriteGuard = suggestionData?.overwrite_guard || false;
+  const custSuggestions = suggestionData?.suggestions?.customer_suggestions || [];
+  const itemSuggestions = suggestionData?.suggestions?.item_suggestions || [];
+  const itemSuggestionMap = {};
+  itemSuggestions.forEach(s => { itemSuggestionMap[s.line_no] = s.candidates || []; });
+
+  const panel = document.getElementById('detailPanel');
+  panel.innerHTML = `
+    <h2>Edit PO ${po.po_number || '?'} <span class="badge-conf ${po.confidence}">${(po.confidence||'').toUpperCase()}</span></h2>
+    <div style="color:#94a3b8; font-size:13px; margin-bottom:16px;">Edit customer mapping, line items, quantities, and pricing. Item dropdown shows this customer's order history sorted by frequency.</div>
+
+    ${overwriteGuard ? `<div class="overwrite-guard-banner" id="overwriteGuardBanner">⚠ This PO already has a high-confidence mapping (confidence: ${suggestionData?.current_confidence || '?'}). Accepting a suggestion will overwrite it.</div>` : ''}
+
+    ${custSuggestions.length ? `
+    <div class="suggestion-box" id="custSuggestionsBox">
+      <div class="suggestion-title">Suggested Customer Mappings</div>
+      ${custSuggestions.map((c, idx) => `
+        <div class="suggestion-chip" id="custChip_${idx}" data-cid="${c.candidate_id}">
+          <div class="suggestion-info">
+            <div class="suggestion-name">${c.candidate_name} (${c.candidate_id})</div>
+            <div class="suggestion-meta">${c.reason} · confidence ${(c.confidence*100).toFixed(0)}%</div>
+            <div class="suggestion-evidence">${c.evidence}</div>
+          </div>
+          <div class="suggestion-actions">
+            <button class="btn-accept" onclick="acceptSuggestion('${id}', 'customer', null, '${c.candidate_id}', '${c.candidate_name.replace(/'/g, "\\'")}', ${overwriteGuard})">Accept</button>
+            <button class="btn-reject" onclick="rejectSuggestion('${id}', 'customer', null, '${c.candidate_id}')">Reject</button>
+          </div>
+        </div>
+      `).join('')}
+    </div>` : ''}
+
+    <div class="meta-grid" style="margin-bottom:16px;">
+      <div class="meta-box" style="position:relative;">
+        <div class="lbl">Customer Search</div>
+        <input id="custSearchInput" type="text" placeholder="Type customer name..." value="${custId ? (h.customer_name_p21||'') + ' (' + custId + ')' : ''}" oninput="searchCustomers(this.value)" style="width:100%; padding:6px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px; margin-top:4px;">
+        <div id="custSearchResults" style="display:none;position:absolute;z-index:100;top:100%;left:0;right:0;background:#1a1d27;border:1px solid #2a2d3a;border-radius:4px;max-height:240px;overflow-y:auto;margin-top:2px;"></div>
+        <input id="editCustId" type="hidden" value="${custId}">
+        <input id="editCustName" type="hidden" value="${h.customer_name_p21||''}">
+        <input id="editShipTo" type="hidden" value="${h.ship2_name||''}">
+      </div>
+      <div class="meta-box">
+        <div class="lbl">Selected Customer</div>
+        <div id="editCustDisplay" style="padding:6px; background:#0f1117; border:1px solid #2a2d3a; border-radius:4px; margin-top:4px; font-size:13px; color:${custId?'#e2e8f0':'#64748b'};">${custId ? `<strong>${h.customer_name_p21||'?'}</strong><br><span style="color:#64748b;font-size:11px;">ID: ${custId}${h.ship2_name ? ' · '+h.ship2_name : ''}</span>` : 'No customer selected — search above'}</div>
+      </div>
+      <div class="meta-box">
+        <div class="lbl">Ship-To</div>
+        <input id="editShipToVisible" value="${h.ship2_name||''}" onchange="document.getElementById('editShipTo').value = this.value;" style="width:100%; padding:6px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px; margin-top:4px;">
+      </div>
+    </div>
+
+    <h3 style="margin:12px 0 8px;">Line Items — <span id="editItemCount" style="color:#64748b; font-size:12px;">${custItems.length} items in this customer's history</span></h3>
+    <table>
+      <tr><th>#</th><th>Item (from customer history)</th><th>Description</th><th>Qty</th><th>Price</th><th>UOM</th></tr>
+      ${lines.map((l,i) => {
+        const lineNo = l.line_no || i+1;
+        const lineCands = itemSuggestionMap[lineNo] || [];
+        let suggestionHtml = '';
+        if (lineCands.length) {
+          suggestionHtml = `<tr><td colspan="6" style="padding:4px 10px 10px; border-bottom:1px solid #1e2030;">
+            <div class="suggestion-box" style="margin:0;">
+              <div class="suggestion-title">Suggestions for line ${lineNo}</div>
+              ${lineCands.map((c, cidx) => `
+                <div class="suggestion-chip" id="itemChip_${lineNo}_${cidx}">
+                  <div class="suggestion-info">
+                    <div class="suggestion-name">${c.candidate_description} (${c.candidate_item_id})</div>
+                    <div class="suggestion-meta">${c.reason} · confidence ${(c.confidence*100).toFixed(0)}%</div>
+                    <div class="suggestion-evidence">${c.evidence}</div>
+                  </div>
+                  <div class="suggestion-actions">
+                    <button class="btn-accept" onclick="acceptSuggestion('${id}', 'item', ${lineNo}, '${c.candidate_item_id}', '${c.candidate_description.replace(/'/g, "\\'")}', ${overwriteGuard})">Accept</button>
+                    <button class="btn-reject" onclick="rejectSuggestion('${id}', 'item', ${lineNo}, '${c.candidate_item_id}')">Reject</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </td></tr>`;
+        }
+        return `<tr>
+          <td>${lineNo}</td>
+          <td style="position:relative;">
+            <input id="itemSearchInput_${i}" type="text" placeholder="${custId ? 'Type to search items...' : 'Select a customer first'}" value="${l.supplier_part_id ? l.supplier_part_id + (l.item_id_p21 ? ' (UID:'+l.item_id_p21+')' : '') : ''}" oninput="searchItems(${i}, this.value)" ${!custId ? 'disabled' : ''} style="width:100%; padding:4px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px; max-width:300px;">
+            <div id="itemSearchResults_${i}" style="display:none;position:absolute;z-index:100;top:100%;left:0;right:0;background:#1a1d27;border:1px solid #2a2d3a;border-radius:4px;max-height:240px;overflow-y:auto;margin-top:2px;"></div>
+            <select id="editItem_${i}" style="display:none;">
+              <option value="${l.item_id_p21||''}" data-desc="${(l.item_description||'').replace(/"/g,'&quot;')}" data-uom="${l.unit_of_measure||'EA'}" data-price="${l.unit_price||''}">${l.supplier_part_id||''}</option>
+            </select>
+          </td>
+          <td><input id="editDesc_${i}" value="${(l.item_description||'').substring(0,40)}" style="width:100%; padding:4px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px;"></td>
+          <td><input id="editQty_${i}" type="number" value="${l.qty_ordered||0}" style="width:70px; padding:4px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px;"></td>
+          <td><input id="editPrice_${i}" type="number" step="0.01" value="${(l.unit_price||0).toFixed?.(2)||'0'}" style="width:90px; padding:4px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px;"></td>
+          <td><input id="editUom_${i}" value="${l.unit_of_measure||'EA'}" style="width:60px; padding:4px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px;"></td>
+        </tr>${suggestionHtml}`;
+      }).join('')}
+    </table>
+
+    <div style="margin-top:12px;">
+      <label style="font-size:11px; color:#64748b; text-transform:uppercase;">Notes</label><br>
+      <textarea id="editNotes" rows="2" style="width:100%; padding:8px; background:#0f1117; color:#fff; border:1px solid #2a2d3a; border-radius:4px; margin-top:4px;" placeholder="Notes for warehouse, special instructions..."></textarea>
+    </div>
+
+    <div class="action-bar">
+      <button class="btn btn-green" onclick="saveEditPO('${po.intake_id}', ${lines.length})">Save Changes</button>
+      <button class="btn btn-gray" onclick="selectPO('${po.intake_id}')">Cancel</button>
+    </div>
+  `;
+}
+
+async function acceptSuggestion(intakeId, targetType, lineNo, selectedId, selectedName, overwriteGuard) {
+  if (overwriteGuard) {
+    if (!confirm('This PO already has a high-confidence mapping. Accepting will overwrite it. Continue?')) return;
+  }
+
+  // Populate edit fields
+  if (targetType === 'customer') {
+    const cidInput = document.getElementById('editCustId');
+    const cnameInput = document.getElementById('editCustName');
+    if (cidInput) cidInput.value = selectedId;
+    if (cnameInput) cnameInput.value = selectedName;
+    // Hide accepted chip
+    const chip = document.querySelector(`#custSuggestionsBox .suggestion-chip[data-cid="${selectedId}"]`);
+    if (chip) { chip.classList.add('accepted'); chip.querySelector('.suggestion-actions').innerHTML = '<span style="color:#4ade80;font-size:11px;font-weight:600;">✓ Accepted</span>'; }
+  } else if (targetType === 'item') {
+    const po = queue.find(p => p.intake_id === intakeId);
+    const lines = po?.lines || [];
+    const lineIdx = lines.findIndex(l => (l.line_no || 0) === lineNo);
+    if (lineIdx >= 0) {
+      const sel = document.getElementById('editItem_' + lineIdx);
+      const searchInput = document.getElementById('itemSearchInput_' + lineIdx);
+      if (sel) {
+        // Check if option exists
+        let opt = Array.from(sel.options).find(o => o.value === selectedId);
+        if (!opt) {
+          opt = document.createElement('option');
+          opt.value = selectedId;
+          opt.textContent = selectedName + ' (UID:' + selectedId + ')';
+          sel.appendChild(opt);
+        }
+        sel.value = selectedId;
+        // Also update the visible search input
+        if (searchInput) searchInput.value = selectedName + ' (UID:' + selectedId + ')';
+        fillItemDetails(lineIdx);
+      }
+    }
+    // Hide accepted chip
+    const chips = document.querySelectorAll(`[id^="itemChip_${lineNo}_"]`);
+    chips.forEach(chip => {
+      if (!chip.classList.contains('accepted')) {
+        chip.classList.add('hidden');
+      }
+    });
+    const acceptedChip = Array.from(document.querySelectorAll(`[id^="itemChip_${lineNo}_"]`)).find(c => c.innerText.includes(selectedId));
+    if (acceptedChip) {
+      acceptedChip.classList.remove('hidden');
+      acceptedChip.classList.add('accepted');
+      acceptedChip.querySelector('.suggestion-actions').innerHTML = '<span style="color:#4ade80;font-size:11px;font-weight:600;">✓ Accepted</span>';
+    }
+  }
+
+  // Record acceptance via API
+  try {
+    await fetch(`${API}/api/v1/suggest/mappings/${intakeId}/decide`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        user_decisions: [{decision:'accept', target_type:targetType, line_no:lineNo, selected_id:selectedId}]
+      })
+    });
+  } catch(e) { console.error('Accept decision error:', e); }
+}
+
+async function rejectSuggestion(intakeId, targetType, lineNo, selectedId) {
+  // Hide rejected chip
+  if (targetType === 'customer') {
+    const chip = document.querySelector(`#custSuggestionsBox .suggestion-chip[data-cid="${selectedId}"]`);
+    if (chip) chip.classList.add('hidden');
+  } else if (targetType === 'item') {
+    const chips = document.querySelectorAll(`[id^="itemChip_${lineNo}_"]`);
+    chips.forEach(chip => {
+      if (chip.innerText.includes(selectedId)) chip.classList.add('hidden');
+    });
+  }
+
+  // Record rejection via API
+  try {
+    await fetch(`${API}/api/v1/suggest/mappings/${intakeId}/decide`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        user_decisions: [{decision:'reject', target_type:targetType, line_no:lineNo, selected_id:selectedId}]
+      })
+    });
+  } catch(e) { console.error('Reject decision error:', e); }
+}
+
+function fillItemDetails(lineIdx) {
+  const sel = document.getElementById('editItem_' + lineIdx);
+  if (!sel) return;
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt) return;
+  if (opt.dataset.desc) document.getElementById('editDesc_' + lineIdx).value = opt.dataset.desc;
+  if (opt.dataset.uom) document.getElementById('editUom_' + lineIdx).value = opt.dataset.uom;
+  if (opt.dataset.price) document.getElementById('editPrice_' + lineIdx).value = opt.dataset.price;
+}
+
+function searchItems(lineIdx, q) {
+  const box = document.getElementById('itemSearchResults_' + lineIdx);
+  const input = document.getElementById('itemSearchInput_' + lineIdx);
+  if (!q || q.length < 1) { box.style.display='none'; box.innerHTML=''; return; }
+  const term = q.toLowerCase();
+  const matches = _editCustItems.filter(i =>
+    (i.customer_part_number || '').toLowerCase().includes(term) ||
+    (i.p21_item_desc || '').toLowerCase().includes(term) ||
+    String(i.p21_inv_mast_uid || '').includes(term)
+  ).slice(0, 20);
+  if (!matches.length) { box.style.display='none'; return; }
+  box.innerHTML = matches.map(i => `
+    <div class="cust-result" onclick="selectItem(${lineIdx}, '${String(i.p21_inv_mast_uid).replace(/'/g,"\\'")}', '${(i.customer_part_number||'').replace(/'/g,"\\'")}', '${(i.p21_item_desc||'').replace(/'/g,"\\'")}', '${(i.unit_of_measure||'EA').replace(/'/g,"\\'")}', '${String(i.unit_price_last||'').replace(/'/g,"\\'")}')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #1e2030;color:#e2e8f0;">
+      <div style="font-weight:600;">${i.customer_part_number}</div>
+      <div style="font-size:11px;color:#64748b;">${(i.p21_item_desc||'').substring(0,40)} · UID: ${i.p21_inv_mast_uid}${i.seen_count ? ' · ('+i.seen_count+'x)' : ''}</div>
+    </div>`).join('');
+  box.style.display='block';
+}
+
+function selectItem(lineIdx, uid, partNum, desc, uom, price) {
+  document.getElementById('editItem_' + lineIdx).value = uid;
+  document.getElementById('itemSearchInput_' + lineIdx).value = partNum + ' — ' + desc.substring(0,30);
+  document.getElementById('itemSearchResults_' + lineIdx).style.display='none';
+  if (desc) document.getElementById('editDesc_' + lineIdx).value = desc;
+  if (uom) document.getElementById('editUom_' + lineIdx).value = uom;
+  if (price) document.getElementById('editPrice_' + lineIdx).value = price;
+}
+
+async function saveEditPO(id, lineCount) {
+  const po = queue.find(p => p.intake_id === id);
+  const lines = (po?.lines || []).map((l, i) => ({
+    line_no: l.line_no || i+1,
+    item_id_p21: document.getElementById('editItem_' + i)?.value || '',
+    item_description: document.getElementById('editDesc_' + i)?.value || '',
+    qty_ordered: parseFloat(document.getElementById('editQty_' + i)?.value || 0),
+    unit_price: parseFloat(document.getElementById('editPrice_' + i)?.value || 0),
+    unit_of_measure: document.getElementById('editUom_' + i)?.value || 'EA',
+  }));
+
+  try {
+    const r = await fetch(`${API}/api/v1/review/po/${id}/edit`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        customer_id_p21: document.getElementById('editCustId')?.value || '',
+        customer_name_p21: document.getElementById('editCustName')?.value || '',
+        ship2_name: document.getElementById('editShipToVisible')?.value || document.getElementById('editShipTo')?.value || '',
+        lines: lines,
+        notes: document.getElementById('editNotes')?.value || '',
+      })
+    });
+    if (!r.ok) throw new Error('Save failed');
+    const result = await r.json();
+    const newConf = result.new_confidence || '?';
+    const reason = result.reason || '';
+    showToast(`PO updated — confidence now ${newConf.toUpperCase()}. ${newConf === 'green' ? 'Auto-approved!' : 'Still needs review.'}`, newConf==='green'?'success':'warn', 5000);
+    loadQueue(currentFilter); loadStats();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+function filterQ(f) {
+  currentFilter = f;
+  document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  loadQueue(f);
+}
+
+async function uploadFile() {
+  const fi = document.getElementById('fileUpload');
+  const src = document.getElementById('uploadSource').value;
+  if (!fi.files.length) { showToast('Select a file', 'warn'); return; }
+  const fd = new FormData();
+  fd.append('file', fi.files[0]);
+  fd.append('source', src);
+  try {
+    const d = await (await fetch(`${API}/api/v1/intake/upload`, {method:'POST', headers:{'X-Actor-Name': localStorage.getItem('actor_name') || 'system'}, body:fd})).json();
+    document.getElementById('uploadResult').innerHTML = `
+      <div style="background:#1a1d27; border:1px solid #2a2d3a; border-radius:8px; padding:16px;">
+        <strong>PO ${d.po_no || '?'}</strong><br>
+        Confidence: <span class="badge-conf ${d.confidence}">${(d.confidence||'').toUpperCase()}</span> — ${d.reason || ''}<br>
+        Customer: ${d.customer_match?.name || 'Not matched'} (${d.customer_match?.method || '-'}, score ${(d.customer_match?.score||0).toFixed(2)})<br>
+        Lines: ${d.lines || 0} | Scores: ${(d.item_scores||[]).map(s=>(s*100).toFixed(0)+'%').join(', ')}<br>
+        ${d.review_required ? '<span style="color:#fbbf24;">Queued for review</span>' : '<span style="color:#4ade80;">Auto-approved + CISM generated</span>'}
+      </div>`;
+    loadQueue(currentFilter); loadStats();
+    fi.value = '';
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+// Crosswalk loading
+async function loadAllXW() { loadCustXW(); loadItemXW(); loadPOHist(); loadMaster(); }
+
+async function loadCustXW() {
+  try {
+    const data = await (await fetch(`${API}/api/v1/crosswalk/customers?limit=100`)).json();
+    const tbl = document.getElementById('custXWTable');
+    const empty = document.getElementById('custXWEmpty');
+    document.getElementById('xwCustCount').textContent = `(${data.length}+ entries)`;
+    if (data.length) {
+      empty.style.display='none'; tbl.style.display='table';
+      tbl.innerHTML = '<tr><th>P21 ID</th><th>Customer</th><th>Ship-To</th><th>Zip</th><th>Source</th><th>Method</th><th>Orders</th><th>Action</th></tr>' +
+        data.map(r => `<tr id="xwRow_${r.p21_customer_id}"><td>${r.p21_customer_id||''}</td><td>${r.p21_customer_name||''}</td><td>${r.ship2_name||''}</td><td>${r.ship2_zip||''}</td><td>${r.source_system||''}</td><td>${r.match_method||''}</td><td>${r.seen_count||''}</td><td><button class="btn btn-blue" style="padding:3px 10px;font-size:11px;" onclick="editCustRow('${r.p21_customer_id}', '${(r.p21_customer_name||'').replace(/'/g,"\\'")}', '${(r.ship2_name||'').replace(/'/g,"\\'")}', '${(r.ship2_zip||'').replace(/'/g,"\\'")}', '${(r.source_system||'').replace(/'/g,"\\'")}')">Edit</button></td></tr>`).join('');
+    } else { empty.style.display='block'; tbl.style.display='none'; }
+  } catch(e) { console.error(e); }
+}
+
+function editCustRow(id, name, ship, zip, source) {
+  const row = document.getElementById('xwRow_' + id);
+  if (!row) return;
+  row.innerHTML = `
+    <td>${id}</td>
+    <td><input id="xwEditName_${id}" value="${name}" style="width:100%;padding:4px;background:#0f1117;color:#fff;border:1px solid #2a2d3a;border-radius:4px;font-size:12px;"></td>
+    <td><input id="xwEditShip_${id}" value="${ship}" style="width:100%;padding:4px;background:#0f1117;color:#fff;border:1px solid #2a2d3a;border-radius:4px;font-size:12px;"></td>
+    <td><input id="xwEditZip_${id}" value="${zip}" style="width:80px;padding:4px;background:#0f1117;color:#fff;border:1px solid #2a2d3a;border-radius:4px;font-size:12px;"></td>
+    <td><input id="xwEditSource_${id}" value="${source}" style="width:80px;padding:4px;background:#0f1117;color:#fff;border:1px solid #2a2d3a;border-radius:4px;font-size:12px;"></td>
+    <td>—</td>
+    <td>—</td>
+    <td>
+      <button class="btn btn-green" style="padding:3px 10px;font-size:11px;" onclick="saveCustRow('${id}')">Save</button>
+      <button class="btn btn-gray" style="padding:3px 10px;font-size:11px;margin-left:4px;" onclick="loadCustXW()">Cancel</button>
+    </td>
+  `;
+}
+
+async function saveCustRow(id) {
+  const name = document.getElementById('xwEditName_' + id)?.value || '';
+  const ship = document.getElementById('xwEditShip_' + id)?.value || '';
+  const zip = document.getElementById('xwEditZip_' + id)?.value || '';
+  const source = document.getElementById('xwEditSource_' + id)?.value || '';
+  try {
+    const resp = await fetch(`${API}/api/v1/crosswalk/customers/${id}/edit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Actor-Name': localStorage.getItem('actor_name') || 'system'
+      },
+      body: JSON.stringify({p21_customer_name: name, ship2_name: ship, ship2_zip: zip, source_system: source})
+    });
+    if (!resp.ok) throw new Error('Save failed');
+    showToast('Customer crosswalk updated', 'success');
+    loadCustXW();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function loadItemXW() {
+  try {
+    const data = await (await fetch(`${API}/api/v1/crosswalk/customer-items?limit=100`)).json();
+    const tbl = document.getElementById('itemXWTable');
+    const empty = document.getElementById('itemXWEmpty');
+    document.getElementById('xwItemCount').textContent = `(${data.length}+ entries)`;
+    if (data.length) {
+      empty.style.display='none'; tbl.style.display='table';
+      tbl.innerHTML = '<tr><th>Customer</th><th>Customer Part #</th><th>P21 Item UID</th><th>Item Description</th><th>UOM</th><th>Avg $</th><th>Orders</th></tr>' +
+        data.map(r => `<tr><td>${r.customer_name||r.p21_customer_id||''}<br><span style="font-size:10px;color:#475569;">ID: ${r.p21_customer_id||''}</span></td><td style="font-weight:600;color:#60a5fa;">${r.customer_part_number||''}</td><td>${r.p21_inv_mast_uid||''}</td><td>${(r.p21_item_desc||'').substring(0,35)}</td><td>${r.unit_of_measure||''}</td><td>${r.unit_price_avg ? '$'+parseFloat(r.unit_price_avg).toFixed(2) : ''}</td><td>${r.seen_count||''}</td></tr>`).join('');
+    } else { empty.style.display='block'; tbl.style.display='none'; }
+  } catch(e) { console.error(e); }
+}
+
+async function loadPOHist() {
+  try {
+    const data = await (await fetch(`${API}/api/v1/crosswalk/po-history?limit=100`)).json();
+    const tbl = document.getElementById('poHistTable');
+    const empty = document.getElementById('poHistEmpty');
+    document.getElementById('xwPOCount').textContent = `(${data.length}+ entries)`;
+    if (data.length) {
+      empty.style.display='none'; tbl.style.display='table';
+      tbl.innerHTML = '<tr><th>Customer</th><th>PO #</th><th>P21 SO #</th><th>Date</th><th>Ship-To</th><th>Status</th></tr>' +
+        data.map(r => `<tr><td>${r.p21_customer_id||''}</td><td>${r.customer_po_no||''}</td><td>${r.p21_order_no||''}</td><td>${(r.order_date||'').substring(0,10)}</td><td>${(r.ship2_name||'').substring(0,25)}</td><td>${r.completed==='Y'?'Complete':'Open'}</td></tr>`).join('');
+    } else { empty.style.display='block'; tbl.style.display='none'; }
+  } catch(e) { console.error(e); }
+}
+
+async function loadMaster() {
+  try {
+    const data = await (await fetch(`${API}/api/v1/crosswalk/items?limit=100`)).json();
+    const tbl = document.getElementById('masterTable');
+    const empty = document.getElementById('masterEmpty');
+    document.getElementById('xwMasterCount').textContent = `(${data.length}+ entries)`;
+    if (data.length) {
+      empty.style.display='none'; tbl.style.display='table';
+      tbl.innerHTML = '<tr><th>UID</th><th>Part Number</th><th>Description</th><th>UOM</th><th>Group</th><th>Supplier</th></tr>' +
+        data.map(r => `<tr><td>${r.p21_inv_mast_uid||''}</td><td style="font-weight:600;color:#60a5fa;">${r.p21_part_number||''}</td><td>${(r.p21_item_desc||'').substring(0,40)}</td><td>${r.default_selling_unit||''}</td><td>${r.product_group||''}</td><td>${r.supplier_name||r.default_supplier_id||''}</td></tr>`).join('');
+    } else { empty.style.display='block'; tbl.style.display='none'; }
+  } catch(e) { console.error(e); }
+}
+
+async function uploadAndBuildXW() {
+  const hdr = document.getElementById('xwHeaders');
+  const lin = document.getElementById('xwLines');
+  const cst = document.getElementById('xwCustomers');
+  if (!hdr.files.length || !lin.files.length || !cst.files.length) { alert('Select all 3 CSVs'); return; }
+  const btn = document.getElementById('buildBtn');
+  const result = document.getElementById('buildResult');
+  btn.disabled = true; btn.textContent = 'Uploading...';
+  result.innerHTML = '<div style="color:#64748b;">Uploading CSVs...</div>';
+  try {
+    for (const [input, type] of [[hdr,'headers'],[lin,'lines'],[cst,'customers']]) {
+      const fd = new FormData(); fd.append('file', input.files[0]); fd.append('file_type', type);
+      const r = await fetch(`${API}/api/v1/crosswalk/upload`, {method:'POST', headers:{'X-Actor-Name': localStorage.getItem('actor_name') || 'system'}, body:fd});
+      if (!r.ok) throw new Error(`Upload ${type} failed`);
+      const d = await r.json();
+      document.getElementById('xw' + type.charAt(0).toUpperCase() + type.slice(1) + 'Status').textContent = `Uploaded (${(d.size/1024).toFixed(0)} KB)`;
+    }
+    btn.textContent = 'Building...';
+    result.innerHTML = '<div style="color:#fbbf24;">Building crosswalk tables...</div>';
+    await fetch(`${API}/api/v1/crosswalk/build`, {method:'POST', headers:{'Content-Type':'application/json', 'X-Actor-Name': localStorage.getItem('actor_name') || 'system'}});
+    let tries = 0;
+    while (tries < 120) {
+      await new Promise(r => setTimeout(r, 2000));
+      const sd = await (await fetch(`${API}/api/v1/crosswalk/build/status`)).json();
+      if (sd.state === 'done') {
+        let fh = sd.result?.files ? Object.entries(sd.result.files).map(([n,c]) => `${n}: <b>${c}</b> rows`).join('<br>') : '';
+        result.innerHTML = `<div style="background:#0d3320; border:1px solid #166534; border-radius:8px; padding:16px; color:#4ade80;"><strong>Crosswalk built!</strong><br>${fh}</div>`;
+        loadAllXW(); loadStats(); break;
+      } else if (sd.state === 'error') { throw new Error(sd.result?.error); }
+      result.innerHTML = `<div style="color:#fbbf24;">Building... (${tries*2}s)</div>`; tries++;
+    }
+  } catch(e) { result.innerHTML = `<div style="background:#3b1111; border:1px solid #991b1b; border-radius:8px; padding:16px; color:#f87171;">Error: ${e.message}</div>`; }
+  finally { btn.disabled = false; btn.textContent = 'Upload & Build Crosswalk'; }
+}
+
+// CISM Schema loader
+async function loadCismSchema() {
+  try {
+    const data = await (await fetch(`${API}/api/v1/cism/schema`)).json();
+    const hdrTbl = document.getElementById('cismHeaderTable');
+    const linTbl = document.getElementById('cismLineTable');
+    hdrTbl.innerHTML = '<tr><th>#</th><th>Field</th><th>Type</th><th>Req</th><th>Max</th><th>Description</th></tr>' +
+      data.header.map((f,i) => `<tr style="${f.required?'background:#0d1f2d;':''}"><td>${i+1}</td><td style="font-weight:${f.required?'600':'400'};color:${f.required?'#60a5fa':'#e0e0e0'}">${f.field}</td><td>${f.type}</td><td>${f.required?'<span style="color:#4ade80;">YES</span>':''}</td><td>${f.max_len||''}</td><td style="color:#94a3b8;">${f.desc}</td></tr>`).join('');
+    linTbl.innerHTML = '<tr><th>#</th><th>Field</th><th>Type</th><th>Req</th><th>Max</th><th>Description</th></tr>' +
+      data.line.map((f,i) => `<tr style="${f.required?'background:#0d1f2d;':''}"><td>${i+1}</td><td style="font-weight:${f.required?'600':'400'};color:${f.required?'#60a5fa':'#e0e0e0'}">${f.field}</td><td>${f.type}</td><td>${f.required?'<span style="color:#4ade80;">YES</span>':''}</td><td>${f.max_len||''}</td><td style="color:#94a3b8;">${f.desc}</td></tr>`).join('');
+  } catch(e) { console.error('CISM schema:', e); }
+}
+
+// Dynamics Quotes
+async function uploadQuotes() {
+  const fi = document.getElementById('quoteFile');
+  if (!fi.files.length) { alert('Select a quote file'); return; }
+  const fd = new FormData(); fd.append('file', fi.files[0]);
+  try {
+    const d = await (await fetch(`${API}/api/v1/crosswalk/upload-quotes`, {method:'POST', headers:{'X-Actor-Name': localStorage.getItem('actor_name') || 'system'}, body:fd})).json();
+    document.getElementById('quoteUploadStatus').textContent = `Uploaded ${d.file} (${(d.size/1024).toFixed(0)} KB)`;
+    loadQuotes();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function loadQuotes() {
+  try {
+    const data = await (await fetch(`${API}/api/v1/crosswalk/quotes?limit=100`)).json();
+    // Split into quotes vs PO links based on fields
+    const quotes = data.filter(r => r.quote_number);
+    const links = data.filter(r => r.case_number);
+
+    // Quotes table
+    const tbl = document.getElementById('quoteTable');
+    const empty = document.getElementById('quoteEmpty');
+    document.getElementById('xwQuoteCount').textContent = quotes.length ? `(${quotes.length}+ entries)` : '';
+    if (quotes.length) {
+      empty.style.display='none'; tbl.style.display='table';
+      tbl.innerHTML = '<tr><th>Quote #</th><th>Name</th><th>Customer</th><th>Contact</th><th>Price</th><th>Terms</th><th>Est Completion</th></tr>' +
+        quotes.map(r => `<tr>
+          <td style="font-weight:600;color:#60a5fa;">${r.quote_number||''}</td>
+          <td>${(r.quote_name||'').substring(0,40)}</td>
+          <td>${r.customer_name||''}</td>
+          <td>${r.contact_name||''}</td>
+          <td>${r.extended_price ? '$'+parseFloat(r.extended_price).toLocaleString() : ''}</td>
+          <td>${r.payment_terms||''}</td>
+          <td>${r.est_completion||''}</td>
+        </tr>`).join('');
+    } else { empty.style.display='block'; tbl.style.display='none'; }
+
+    // PO linkage table
+    const linkTbl = document.getElementById('linkTable');
+    const linkEmpty = document.getElementById('linkEmpty');
+    document.getElementById('xwLinkCount').textContent = links.length ? `(${links.length}+ entries)` : '';
+    if (links.length) {
+      linkEmpty.style.display='none'; linkTbl.style.display='table';
+      linkTbl.innerHTML = '<tr><th>Case #</th><th>Customer PO #</th><th>EnPro Order #</th><th>Customer</th><th>Case Title</th><th>Created</th></tr>' +
+        links.map(r => `<tr>
+          <td style="font-family:monospace;font-size:11px;">${r.case_number||''}</td>
+          <td style="font-weight:600;color:#4ade80;">${r.customer_po_number||''}</td>
+          <td style="font-weight:600;">${r.enpro_order_number||''}</td>
+          <td>${r.customer_name||''}</td>
+          <td>${(r.case_title||'').substring(0,45)}</td>
+          <td>${(r.created||'').substring(0,10)}</td>
+        </tr>`).join('');
+    } else { linkEmpty.style.display='block'; linkTbl.style.display='none'; }
+  } catch(e) { console.error(e); }
+}
+
+// Processed tab
+async function loadProcessed() {
+  try {
+    // Approved POs with CISM files
+    const approved = await (await fetch(`${API}/api/v1/review/approved`)).json();
+    const procTbl = document.getElementById('procTable');
+    const procEmpty = document.getElementById('procEmpty');
+    document.getElementById('procBadge').textContent = approved.length;
+    if (approved.length) {
+      procEmpty.style.display='none'; procTbl.style.display='table';
+      procTbl.innerHTML = '<tr><th>PO #</th><th>Customer</th><th>Source</th><th>Conf</th><th>Lines</th><th>Reviewed</th><th>P21 SO #</th><th>CISM Set</th><th>Actions</th></tr>' +
+        approved.map(r => `<tr>
+          <td style="font-weight:600;">${r.po_number||''}</td>
+          <td>${r.customer_p21||''} <span style="color:#475569;font-size:10px;">(${r.customer_id_p21||''})</span></td>
+          <td><span style="text-transform:uppercase;font-size:10px;background:${r.source==='ariba'?'#1e3a5f':r.source==='coupa'?'#2d1b69':'#334155'};padding:1px 6px;border-radius:3px;">${r.source||''}</span></td>
+          <td><span class="badge-conf ${r.confidence}">${(r.confidence||'').toUpperCase()}</span></td>
+          <td>${r.lines_count||0}</td>
+          <td>${r.reviewed_by||'auto'} ${r.reviewed_at?(new Date(r.reviewed_at)).toLocaleDateString():''}</td>
+          <td style="color:${r.p21_so_number?'#4ade80':'#94a3b8'};font-weight:600;font-size:12px;">${r.p21_so_number||'—'}</td>
+          <td style="font-family:monospace;font-size:11px;">${r.import_set_no||'-'}</td>
+          <td style="white-space:nowrap;">${r.import_set_no ? `<a href="${API}/api/v1/cism/download/${r.intake_id}/header" class="btn btn-gray" style="padding:3px 8px;font-size:11px;">HDR</a> <a href="${API}/api/v1/cism/download/${r.intake_id}/lines" class="btn btn-gray" style="padding:3px 8px;font-size:11px;">LIN</a>` : ''} <a href="${API}/api/v1/p21/payload/${r.intake_id}/download" class="btn btn-gray" style="padding:3px 8px;font-size:11px;" download>JSON</a> ${!r.p21_so_number ? `<button class="btn btn-green" style="padding:3px 8px;font-size:11px;background:#059669;" onclick="submitP21Single('${r.intake_id}')">Submit</button>` : ''}</td>
+        </tr>`).join('');
+    } else { procEmpty.style.display='block'; procTbl.style.display='none'; }
+
+    // All POs history
+    const all = await (await fetch(`${API}/api/v1/review/all`)).json();
+    const allTbl = document.getElementById('allPOsTable');
+    const allEmpty = document.getElementById('allPOsEmpty');
+    if (all.length) {
+      allEmpty.style.display='none'; allTbl.style.display='table';
+      allTbl.innerHTML = '<tr><th>PO #</th><th>Customer</th><th>Source</th><th>Conf</th><th>Status</th><th>Lines</th><th>Received</th></tr>' +
+        all.map(r => `<tr onclick="viewPO('${r.intake_id}')" style="cursor:pointer;">
+          <td style="font-weight:600;">${r.po_number||''}</td>
+          <td>${r.customer_p21||''}</td>
+          <td>${r.source||''}</td>
+          <td><span class="badge-conf ${r.confidence}">${(r.confidence||'').toUpperCase()}</span></td>
+          <td style="color:${r.review_status==='approved'?'#4ade80':r.review_status==='rejected'?'#f87171':'#fbbf24'};font-weight:600;">${(r.review_status||'').toUpperCase()}</td>
+          <td>${r.lines_count||0}</td>
+          <td>${r.received?(new Date(r.received)).toLocaleDateString():''}</td>
+        </tr>`).join('');
+    } else { allEmpty.style.display='block'; allTbl.style.display='none'; }
+  } catch(e) { console.error('Processed:', e); }
+}
+
+// CISM Batch tab
+async function loadBatch() {
+  try {
+    const data = await (await fetch(`${API}/api/v1/cism/batch`)).json();
+    document.getElementById('batchApproved').textContent = data.header_count || 0;
+    document.getElementById('batchLines').textContent = data.line_count || 0;
+    document.getElementById('batchBadge').textContent = data.header_count || 0;
+
+    // Download links
+    document.getElementById('dlBatchHeader').href = data.header_count ? `${API}/api/v1/cism/batch/download/header` : '#';
+    document.getElementById('dlBatchLines').href = data.line_count ? `${API}/api/v1/cism/batch/download/lines` : '#';
+
+    // Header table
+    const hTbl = document.getElementById('batchHeaderTable');
+    const hEmpty = document.getElementById('batchHeaderEmpty');
+    if (data.headers?.length) {
+      hEmpty.style.display='none'; hTbl.style.display='table';
+      hTbl.innerHTML = '<tr><th>Import Set</th><th>Customer ID</th><th>Customer</th><th>PO #</th><th>Ship-To</th><th>City</th><th>St</th><th>Zip</th><th>Date</th><th>Approved</th></tr>' +
+        data.headers.map(r => `<tr>
+          <td style="font-family:monospace;font-size:11px;">${r['Import Set No']||''}</td>
+          <td>${r['Customer ID']||''}</td>
+          <td style="font-weight:600;">${r['Customer Name']||''}</td>
+          <td style="color:#60a5fa;">${r['Customer PO Number']||''}</td>
+          <td>${r['Ship To Name']||''}</td>
+          <td>${r['Ship To City']||''}</td>
+          <td>${r['Ship To State']||''}</td>
+          <td>${r['Ship To Zip Code']||''}</td>
+          <td>${r['Order Date']||''}</td>
+          <td style="color:#4ade80;">${r['Approved']||''}</td>
+        </tr>`).join('');
+    } else { hEmpty.style.display='block'; hTbl.style.display='none'; }
+
+    // Lines table
+    const lTbl = document.getElementById('batchLineTable');
+    const lEmpty = document.getElementById('batchLineEmpty');
+    if (data.lines?.length) {
+      lEmpty.style.display='none'; lTbl.style.display='table';
+      lTbl.innerHTML = '<tr><th>Import Set</th><th>Line</th><th>Item ID</th><th>Qty</th><th>UOM</th><th>Price</th><th>Description</th><th>Disp</th></tr>' +
+        data.lines.map(r => `<tr>
+          <td style="font-family:monospace;font-size:11px;">${r['Import Set Number']||''}</td>
+          <td>${r['Line No']||''}</td>
+          <td style="font-weight:600;color:#60a5fa;">${r['Item ID']||''}</td>
+          <td>${r['Unit Quantity']||''}</td>
+          <td>${r['Unit of Measure']||''}</td>
+          <td>$${r['Unit Price']||'0'}</td>
+          <td>${(r['Item Description']||'').substring(0,35)}</td>
+          <td>${r['Disposition']||''}</td>
+        </tr>`).join('');
+    } else { lEmpty.style.display='block'; lTbl.style.display='none'; }
+  } catch(e) { console.error('Batch:', e); }
+}
+
+async function clearBatch() {
+  if (!confirm('Clear the batch? This archives the files and starts fresh. Only do this AFTER uploading to Azure Blob.')) return;
+  try {
+    await fetch(`${API}/api/v1/cism/batch/clear`, {method:'POST', headers:{'X-Actor-Name': localStorage.getItem('actor_name') || 'system'}});
+    showToast('Batch cleared and archived.', 'success');
+    loadBatch();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+// Make All POs clickable
+async function viewPO(intakeId) {
+  try {
+    const po = await (await fetch(`${API}/api/v1/review/po/${intakeId}`)).json();
+    const h = po.header || {};
+    const lines = po.lines || [];
+    const panel = document.querySelector('#panel-processed');
+    // Scroll to top and show detail
+    const detailHtml = `
+      <div class="xw-section" id="poDetailOverlay" style="border:2px solid #3b82f6;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <h3>PO ${po.po_no||'?'} <span class="badge-conf ${po.confidence}">${(po.confidence||'').toUpperCase()}</span> <span style="color:${po.review_status==='approved'?'#4ade80':'#fbbf24'};font-weight:600;">${(po.review_status||'').toUpperCase()}</span></h3>
+          <button class="btn btn-gray" onclick="document.getElementById('poDetailOverlay').remove()" style="padding:4px 12px;">Close</button>
+        </div>
+        <div style="color:#94a3b8;font-size:13px;margin:8px 0;">${po.reason||''}</div>
+        <div class="meta-grid">
+          <div class="meta-box"><div class="lbl">Customer</div><div class="val">${h.customer_name_p21||''} (${h.customer_id_p21||''})</div></div>
+          <div class="meta-box"><div class="lbl">Ship-To</div><div class="val">${h.ship2_name||''}, ${h.ship2_city||''} ${h.ship2_state||''} ${h.ship2_zip||''}</div></div>
+          <div class="meta-box"><div class="lbl">Source / Match</div><div class="val">${po.source||''} | ${h.customer_match_method||''} (${(h.customer_match_score||0).toFixed?.(2)||'0'})</div></div>
+        </div>
+        <table>
+          <tr><th>#</th><th>Part #</th><th>Description</th><th>Qty</th><th>Price</th><th>P21 Item</th><th>Match</th></tr>
+          ${lines.map((l,i) => `<tr>
+            <td>${l.line_no||i+1}</td>
+            <td>${l.supplier_part_id||''}</td>
+            <td>${(l.item_description||'').substring(0,35)}</td>
+            <td>${l.qty_ordered||0}</td>
+            <td>$${(l.unit_price||0).toFixed?.(2)||'0'}</td>
+            <td>${l.item_id_p21||'<span style="color:#f87171">-</span>'}</td>
+            <td>${matchLabel(l.crosswalk_match_score)}</td>
+          </tr>`).join('')}
+        </table>
+        ${po.cism ? `<div style="margin-top:8px;font-size:12px;color:#475569;">CISM: ${po.cism.import_set_no} | <a href="${API}/api/v1/cism/download/${po.intake_id}/header" style="color:#60a5fa;">Header</a> | <a href="${API}/api/v1/cism/download/${po.intake_id}/lines" style="color:#60a5fa;">Lines</a></div>` : ''}
+      </div>`;
+    // Remove old overlay if exists
+    const old = document.getElementById('poDetailOverlay');
+    if (old) old.remove();
+    panel.insertAdjacentHTML('afterbegin', detailHtml);
+    panel.scrollTop = 0;
+  } catch(e) { alert('Error loading PO: ' + e.message); }
+}
+
+function showTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  const clickedTab = event?.target?.closest('.tab');
+  if (clickedTab) clickedTab.classList.add('active');
+  if (name === 'crosswalk') { loadAllXW(); loadQuotes(); }
+  if (name === 'cism') loadCismSchema();
+  if (name === 'processed') loadProcessed();
+  if (name === 'batch') loadBatch();
+  if (name === 'payloads') loadPayloads();
+  if (name === 'outbound') loadOutbound();
+  if (name === 'audit') loadAudit();
+  // invoices is a coming-soon panel — no data load
+}
+
+async function loadPayloads() {
+  try {
+    const data = await (await fetch(`${API}/api/v1/p21/payloads`)).json();
+    const tbody = document.getElementById('payloadsTbody');
+    const tbl = document.getElementById('payloadsTable');
+    const empty = document.getElementById('payloadsEmpty');
+    document.getElementById('payloadsBadge').textContent = data.length;
+    if (!data.length) { empty.style.display='block'; tbl.style.display='none'; return; }
+    empty.style.display='none'; tbl.style.display='table';
+    tbody.innerHTML = data.map(r => `<tr>
+      <td style="text-align:center;"><input type="checkbox" class="payload-check" value="${r.intake_id}" onchange="_preflightRan=false;updateBatchBtn()"></td>
+      <td style="font-weight:600;color:#fff;">${r.po_no||'-'}</td>
+      <td style="font-family:monospace;font-size:11px;color:#64748b;">${r.intake_id}</td>
+      <td>${r.customer_name||'-'} ${r.customer_id ? '<span style="color:#64748b;font-size:11px;">('+r.customer_id+')</span>' : ''}</td>
+      <td style="text-align:center;">${r.lines_count||0}</td>
+      <td><span class="badge-conf ${r.confidence}">${(r.confidence||'').toUpperCase()}</span></td>
+      <td style="color:${r.review_status==='approved'?'#4ade80':r.review_status==='rejected'?'#f87171':'#fbbf24'};font-weight:600;font-size:12px;">${(r.review_status||'pending').toUpperCase()}</td>
+      <td>${(()=>{const pv=r.payload_validation||{};const s=pv.status||'unknown';return `<span class="badge-valid ${s}">${s==='batch_ready'?'Batch Ready':s==='needs_fix'?'Needs Fix':'—'}</span>`})()}</td>
+      <td style="font-size:11px;color:#64748b;">${r.created_at?r.created_at.substring(0,16).replace('T',' '):'-'}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-blue" style="padding:4px 10px;font-size:11px;" onclick="viewPayload('${r.intake_id}','${r.po_no}','${r.filename}')">View JSON</button>
+        <a class="btn btn-gray" style="padding:4px 10px;font-size:11px;text-decoration:none;" href="${API}/api/v1/p21/payload/${r.intake_id}/download" download="${r.filename}">Download</a>
+        ${r.review_status==='approved' && !r.p21_so_number ? `<button class="btn btn-green" style="padding:4px 10px;font-size:11px;background:#059669;" onclick="submitP21Single('${r.intake_id}')">Submit</button>` : ''}
+      </td>
+    </tr>`).join('');
+    updateBatchBtn();
+  } catch(e) { console.error('loadPayloads error:', e); }
+}
+
+function toggleSelectAll(cb) {
+  _preflightRan = false;
+  document.querySelectorAll('.payload-check').forEach(c => { c.checked = cb.checked; });
+  updateBatchBtn();
+}
+
+let _preflightRan = false;
+
+function updateBatchBtn() {
+  const checked = document.querySelectorAll('.payload-check:checked').length;
+  document.getElementById('batchDownloadBtn').disabled = checked === 0;
+  const pfBtn = document.getElementById('preflightBtn');
+  if (pfBtn) pfBtn.disabled = checked === 0;
+  const hint = document.getElementById('preflightHint');
+  if (hint) hint.style.display = (checked > 0 && !_preflightRan) ? 'inline' : 'none';
+  // Reset preflight panel when selection changes
+  if (!_preflightRan) {
+    const panel = document.getElementById('preflightPanel');
+    if (panel) {
+      panel.style.display = checked > 0 ? 'block' : 'none';
+      panel.innerHTML = checked > 0 ? '<div style="color:#64748b;font-size:13px;">Click <strong style="color:#e0e0e0;">Run Batch Preflight</strong> to validate selection before downloading.</div>' : '';
+    }
+  }
+  const sa = document.getElementById('selectAllPayloads');
+  const all = document.querySelectorAll('.payload-check').length;
+  if (sa) sa.indeterminate = checked > 0 && checked < all;
+  if (sa) sa.checked = all > 0 && checked === all;
+}
+
+async function runPreflight() {
+  const ids = Array.from(document.querySelectorAll('.payload-check:checked')).map(c => c.value);
+  const panel = document.getElementById('preflightPanel');
+  if (!ids.length) {
+    panel.style.display = 'block';
+    panel.innerHTML = '<div style="color:#64748b;font-size:13px;">Select one or more POs to run preflight.</div>';
+    return;
+  }
+  panel.style.display = 'block';
+  panel.innerHTML = '<div style="color:#64748b;font-size:13px;">Running preflight…</div>';
+  try {
+    const resp = await fetch(`${API}/api/v1/p21/payload/batch/preflight`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({intake_ids: ids, approved_only: true}),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    _preflightRan = true;
+    const hint = document.getElementById('preflightHint');
+    if (hint) hint.style.display = data.skipped_count > 0 ? 'inline' : 'none';
+    renderPreflightPanel(data);
+  } catch(e) {
+    panel.innerHTML = `<div style="color:#f87171;font-size:13px;">Preflight failed: ${e.message}</div>`;
+  }
+}
+
+function renderPreflightPanel(data) {
+  const panel = document.getElementById('preflightPanel');
+  const rcColor = { NOT_FOUND:'#f87171', NOT_APPROVED:'#fbbf24', MISSING_CUSTOMER_ID:'#f87171', NO_VALID_LINE_ITEMS:'#f87171', BUILD_ERROR:'#f87171' };
+  const includedRows = (data.included || []).map(i => {
+    const pvs = (i.validation_status || 'batch_ready');
+    return `<tr>
+      <td style="font-weight:600;color:#fff;">${i.po_no}</td>
+      <td>${i.customer || '—'}</td>
+      <td style="text-align:center;">${i.lines}</td>
+      <td><span class="badge-conf ${i.confidence}">${(i.confidence||'').toUpperCase()}</span></td>
+      <td style="color:#4ade80;font-weight:600;font-size:11px;">${(i.status||'').toUpperCase()}</td>
+      <td><span class="badge-valid ${pvs}">${pvs==='batch_ready'?'Batch Ready':pvs==='needs_fix'?'Needs Fix':'—'}</span></td>
+    </tr>`;
+  }).join('');
+  const skippedRows = (data.skipped || []).map(s =>
+    `<tr>
+      <td style="font-weight:600;color:#fff;">${s.po_no || s.intake_id}</td>
+      <td><span class="reason-badge">${s.reason_code}</span></td>
+      <td style="color:#94a3b8;font-size:12px;">${s.reason_message}</td>
+    </tr>`
+  ).join('');
+
+  let html = `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#64748b;margin-bottom:10px;">Batch Preflight Result</div>`;
+  html += `<div class="preflight-chips">
+    <span class="preflight-chip selected">Selected: ${data.selected_count}</span>
+    <span class="preflight-chip included">Included: ${data.included_count}</span>
+    ${data.skipped_count > 0 ? `<span class="preflight-chip skipped">Skipped: ${data.skipped_count}</span>` : ''}
+  </div>`;
+
+  if (data.included_count > 0) {
+    html += `<div style="font-size:11px;text-transform:uppercase;color:#4ade80;letter-spacing:1px;margin-bottom:6px;font-weight:700;">Will be included (${data.included_count})</div>`;
+    html += `<div class="scroll-table" style="max-height:180px;margin-bottom:14px;"><table style="font-size:12px;">
+      <tr><th>PO #</th><th>Customer</th><th>Lines</th><th>Conf</th><th>Status</th><th>Validation</th></tr>
+      ${includedRows}
+    </table></div>`;
+  } else {
+    html += `<div style="color:#f87171;font-size:13px;margin-bottom:10px;">⚠ No POs will be included — fix issues below before downloading.</div>`;
+  }
+
+  if (data.skipped_count > 0) {
+    html += `<div style="font-size:11px;text-transform:uppercase;color:#f87171;letter-spacing:1px;margin-bottom:6px;font-weight:700;">Will be skipped (${data.skipped_count})</div>`;
+    html += `<div class="scroll-table" style="max-height:180px;"><table style="font-size:12px;">
+      <tr><th>PO #</th><th>Reason Code</th><th>Details</th></tr>
+      ${skippedRows}
+    </table></div>`;
+  }
+
+  panel.innerHTML = html;
+}
+
+async function downloadBatchPayload() {
+  const ids = Array.from(document.querySelectorAll('.payload-check:checked')).map(c => c.value);
+  if (!ids.length) return;
+  const notice = document.getElementById('batchNotice');
+  notice.style.display = 'block';
+  notice.textContent = 'Validating batch…';
+
+  try {
+    const summaryResp = await fetch(`${API}/api/v1/p21/payload/batch`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({intake_ids: ids, approved_only: true}),
+    });
+    const summary = await summaryResp.json();
+
+    if (!summaryResp.ok) {
+      const detail = summary.detail || summary;
+      const skipped = (detail.skipped_reasons || []).map(s => `${s.po_no||s.intake_id}: ${s.reason}`).join('; ');
+      notice.style.color = '#f87171';
+      notice.textContent = `No POs passed validation. Skipped: ${skipped || 'unknown'}`;
+      return;
+    }
+
+    let msg = `Included ${summary.included_count} of ${summary.selected_count} selected.`;
+    if (summary.skipped_count > 0) {
+      const reasons = summary.skipped_reasons.map(s => `${s.po_no||s.intake_id}: ${s.reason}`).join('; ');
+      msg += ` Skipped ${summary.skipped_count}: ${reasons}`;
+    }
+    notice.style.color = '#a5f3fc';
+    notice.textContent = msg;
+
+    if (summary.included_count === 0) return;
+
+    const dlResp = await fetch(`${API}/api/v1/p21/payload/batch/download`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({intake_ids: ids, approved_only: true}),
+    });
+    if (!dlResp.ok) {
+      notice.style.color = '#f87171';
+      notice.textContent += ' Download failed.';
+      return;
+    }
+    const cd = dlResp.headers.get('Content-Disposition') || '';
+    const fnMatch = cd.match(/filename="?([^"]+)"?/);
+    const filename = fnMatch ? fnMatch[1] : 'p21_batch.json';
+    const blob = await dlResp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    notice.style.color = '#f87171';
+    notice.textContent = 'Batch request failed: ' + e.message;
+  }
+}
+
+async function viewPayload(intakeId, poNo, filename) {
+  const modal = document.getElementById('jsonModal');
+  const viewer = document.getElementById('jsonViewer');
+  const title = document.getElementById('modalTitle');
+  const fnEl = document.getElementById('modalFilename');
+  const dlLink = document.getElementById('modalDownloadLink');
+  viewer.textContent = 'Loading…';
+  modal.style.display = 'block';
+  document.body.style.overflow = 'hidden';
+  title.textContent = `PO ${poNo}`;
+  fnEl.textContent = filename;
+  dlLink.href = `${API}/api/v1/p21/payload/${intakeId}/download`;
+  dlLink.download = filename;
+  try {
+    const resp = await fetch(`${API}/api/v1/p21/payload/${intakeId}/download`);
+    const json = await resp.json();
+    viewer.textContent = JSON.stringify(json, null, 2);
+  } catch(e) {
+    viewer.textContent = `Error loading payload: ${e.message}`;
+  }
+}
+
+function closeModal() {
+  document.getElementById('jsonModal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+document.getElementById('jsonModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// ── Outbound Sync ────────────────────────────────────────────────────────────
+
+function obBadge(status) {
+  return `<span class="badge-ob ${status||'pending'}">${status||'pending'}</span>`;
+}
+
+async function loadOutbound() {
+  try {
+    const [queueData, allPos] = await Promise.all([
+      fetch(`${API}/api/v1/outbound/queue`).then(r => r.json()),
+      fetch(`${API}/api/v1/review/all`).then(r => r.json()),
+    ]);
+
+    // Update badge
+    document.getElementById('outboundBadge').textContent = queueData.length;
+
+    // Render queue table
+    const tbody = document.getElementById('outboundTbody');
+    const tbl   = document.getElementById('outboundTable');
+    const empty = document.getElementById('outboundEmpty');
+
+    if (!queueData.length) {
+      empty.style.display = 'block';
+      tbl.style.display   = 'none';
+    } else {
+      empty.style.display = 'none';
+      tbl.style.display   = 'table';
+      tbody.innerHTML = queueData.map(r => {
+        const canPrepare = r.status === 'pending';
+        const canSend    = r.status === 'ready' || r.status === 'failed';
+        const canRetry   = r.status === 'failed';
+        const amt = r.amount_total ? '$' + parseFloat(r.amount_total).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
+        return `<tr>
+          <td style="font-weight:600;color:#fff;">${r.po_no||'—'}</td>
+          <td><span style="font-size:11px;padding:1px 7px;border-radius:3px;background:${r.source_system==='ariba'?'#1e3a5f':'#2d1b69'};color:#e0e0e0;">${r.source_system||'ariba'}</span></td>
+          <td style="font-family:monospace;font-size:11px;color:#64748b;">${r.p21_invoice_no||r.p21_order_no||'—'}</td>
+          <td style="text-align:right;">${amt}</td>
+          <td style="font-family:monospace;font-size:11px;color:#94a3b8;">${r.customer_id||'—'}</td>
+          <td>${obBadge(r.status)}</td>
+          <td style="font-size:11px;color:#64748b;">${r.updated_at?r.updated_at.substring(0,16).replace('T',' '):'—'}</td>
+          <td style="font-size:11px;color:#f87171;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.last_error||''}">${r.last_error||'—'}</td>
+          <td style="white-space:nowrap;display:flex;gap:6px;padding:8px 10px;">
+            <button class="btn btn-gray" style="padding:3px 9px;font-size:11px;" onclick="prepareOutbound('${r.intake_id}')">Prepare</button>
+            <button class="btn btn-gray" style="padding:3px 9px;font-size:11px;" onclick="viewOutboundPayload('${r.outbound_id}','${r.po_no}')">View</button>
+            ${canSend ? `<button class="btn btn-green" style="padding:3px 9px;font-size:11px;" onclick="sendMock('${r.outbound_id}')">Send (Mock)</button>` : ''}
+            ${canRetry ? `<button class="btn btn-blue" style="padding:3px 9px;font-size:11px;" onclick="sendMock('${r.outbound_id}')">Retry</button>` : ''}
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    // Populate approved PO select — exclude already-prepared
+    const preparedIntakeIds = new Set(queueData.map(r => r.intake_id));
+    const approved = (allPos || []).filter(p => p.review_status === 'approved');
+    const sel = document.getElementById('outboundPoSelect');
+    sel.innerHTML = '<option value="">— Select approved PO —</option>' +
+      approved.map(p => {
+        const label = preparedIntakeIds.has(p.intake_id)
+          ? `${p.po_no||p.intake_id} [already prepared]`
+          : `${p.po_no||p.intake_id} — ${p.source||''} ${p.confidence||''}`;
+        return `<option value="${p.intake_id}">${label}</option>`;
+      }).join('');
+  } catch(e) {
+    console.error('loadOutbound:', e);
+  }
+}
+
+async function loadAudit() {
+  try {
+    const data = await (await fetch(`${API}/api/v1/audit?limit=100`)).json();
+    const container = document.getElementById('auditContainer');
+    if (!data.length) {
+      container.innerHTML = '<div class="empty">No audit entries yet</div>';
+      return;
+    }
+    container.innerHTML = `<table style="width:100%;font-size:13px;">
+      <tr style="text-align:left;border-bottom:1px solid #2a2d3a;">
+        <th style="padding:8px;">Time</th>
+        <th style="padding:8px;">Actor</th>
+        <th style="padding:8px;">Action</th>
+        <th style="padding:8px;">PO #</th>
+        <th style="padding:8px;">Details</th>
+      </tr>
+      ${data.map(r => `<tr style="border-bottom:1px solid #1e2030;">
+        <td style="padding:8px;color:#94a3b8;font-size:12px;white-space:nowrap;">${r.timestamp ? r.timestamp.substring(0,16).replace('T',' ') : '—'}</td>
+        <td style="padding:8px;font-weight:600;">${r.actor || '—'}</td>
+        <td style="padding:8px;"><span style="font-size:11px;padding:2px 8px;border-radius:3px;background:${r.action==='approve'?'#1a3a1a':r.action==='reject'?'#3b1111':'#1e2030'};color:${r.action==='approve'?'#4ade80':r.action==='reject'?'#f87171':'#94a3b8'};">${r.action||'—'}</span></td>
+        <td style="padding:8px;font-family:monospace;font-size:12px;color:#64748b;">${r.intake_id ? r.intake_id.substring(0,12)+'...' : '—'}</td>
+        <td style="padding:8px;color:#94a3b8;font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.details||''}">${r.details||'—'}</td>
+      </tr>`).join('')}
+    </table>`;
+  } catch(e) {
+    document.getElementById('auditContainer').innerHTML = '<div class="empty">Failed to load audit log</div>';
+    console.error('loadAudit:', e);
+  }
+}
+
+async function prepareSelected() {
+  const sel = document.getElementById('outboundPoSelect');
+  const intake_id = sel.value;
+  if (!intake_id) { showToast('Select an approved PO first.', 'warn'); return; }
+  await prepareOutbound(intake_id);
+}
+
+async function prepareOutbound(intake_id) {
+  const status = document.getElementById('prepareStatus');
+  status.style.color = '#94a3b8';
+  status.textContent = 'Preparing…';
+  try {
+    const resp = await fetch(`${API}/api/v1/outbound/prepare/${intake_id}`, {method:'POST', headers:{'X-Actor-Name': localStorage.getItem('actor_name') || 'system'}});
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || resp.statusText);
+    status.style.color = '#4ade80';
+    status.textContent = `✓ ${data.outbound_id} ready`;
+    loadOutbound();
+  } catch(e) {
+    status.style.color = '#f87171';
+    status.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function sendMock(outbound_id) {
+  try {
+    const resp = await fetch(`${API}/api/v1/outbound/send/${outbound_id}`, {method:'POST', headers:{'X-Actor-Name': localStorage.getItem('actor_name') || 'system'}});
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || resp.statusText);
+    showToast(`Mock send complete. ACK: ${data.acknowledgment||'—'}`, 'success');
+    loadOutbound();
+  } catch(e) {
+    alert('Send error: ' + e.message);
+  }
+}
+
+async function viewOutboundPayload(outbound_id, po_no) {
+  const modal  = document.getElementById('jsonModal');
+  const viewer = document.getElementById('jsonViewer');
+  const title  = document.getElementById('modalTitle');
+  const fnEl   = document.getElementById('modalFilename');
+  const dlLink = document.getElementById('modalDownloadLink');
+  viewer.textContent = 'Loading…';
+  modal.style.display = 'block';
+  document.body.style.overflow = 'hidden';
+  title.textContent = `Outbound Payload — PO ${po_no||outbound_id}`;
+  fnEl.textContent  = `outbound_${outbound_id}.json`;
+  dlLink.style.display = 'none'; // no download endpoint for outbound yet
+  try {
+    const resp = await fetch(`${API}/api/v1/outbound/payload/${outbound_id}`);
+    const json = await resp.json();
+    viewer.textContent = JSON.stringify(json, null, 2);
+  } catch(e) {
+    viewer.textContent = `Error loading payload: ${e.message}`;
+  }
+}
+
+// ── View Mode ─────────────────────────────────────────────────────────────────
+// Set ADMIN_PASSPHRASE env var server-side to enable admin mode.
+// If not configured, admin tabs are hidden and admin mode is inaccessible.
+let _adminPassphrase = '';  // locked by default — set by server config
+
+(async () => {
+  try {
+    const cfg = await fetch(`${API}/api/v1/ui/config`).then(r => r.json());
+    if (cfg && cfg.admin_passphrase) _adminPassphrase = cfg.admin_passphrase;
+  } catch(_) {}
+})();
+
+function applyMode(mode) {
+  const isAdmin = (mode === 'admin');
+  document.getElementById('modeBadge').textContent = isAdmin ? 'Admin' : 'Operator';
+  document.getElementById('modeBadge').className = `mode-badge ${mode}`;
+  document.getElementById('modeToggleBtn').textContent = isAdmin ? 'Exit Admin' : 'Admin View';
+  document.querySelectorAll('.admin-only').forEach(el => {
+    el.style.display = isAdmin ? '' : 'none';
+  });
+  if (!isAdmin) {
+    const active = document.querySelector('.tab-panel.active');
+    const adminPanels = ['panel-crosswalk','panel-cism','panel-pipeline','panel-outbound'];
+    if (active && adminPanels.includes(active.id)) {
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('panel-queue').classList.add('active');
+      document.querySelector('.tab[onclick*="\'queue\'"]').classList.add('active');
+    }
+  }
+  localStorage.setItem('ui_mode', mode);
+}
+
+function toggleAdminMode() {
+  const current = localStorage.getItem('ui_mode') || 'operator';
+  if (current === 'admin') { applyMode('operator'); return; }
+  // Prompt for name + passphrase
+  const name = prompt('Your name:');
+  if (name === null) return;
+  if (!name.trim()) { showToast('Name is required.', 'error'); return; }
+  const input = prompt('Admin passphrase:');
+  if (input === null) return;
+  if (input === _adminPassphrase) {
+    localStorage.setItem('actor_name', name.trim());
+    updateActorDisplay();
+    applyMode('admin');
+  } else {
+    showToast('Incorrect passphrase.', 'error');
+  }
+}
+
+function updateActorDisplay() {
+  const actor = localStorage.getItem('actor_name');
+  const disp = document.getElementById('actorDisplay');
+  const logout = document.getElementById('logoutBtn');
+  if (actor) {
+    disp.textContent = actor + ' |';
+    logout.style.display = '';
+  } else {
+    disp.textContent = '';
+    logout.style.display = 'none';
+  }
+}
+
+function logoutActor() {
+  localStorage.removeItem('actor_name');
+  localStorage.removeItem('ui_mode');
+  location.reload();
+}
+
+function initMode() {
+  applyMode(localStorage.getItem('ui_mode') || 'operator');
+  updateActorDisplay();
+}
+
+initMode(); loadStats(); loadQueue('all'); checkDisk();
+setInterval(loadStats, 30000);
+setInterval(checkDisk, 60000);
+
+document.addEventListener('keydown', (e) => {
+  const tag = document.activeElement?.tagName?.toLowerCase();
+  const inInput = tag === 'input' || tag === 'textarea' || tag === 'select';
+
+  if (e.key === 'Escape') {
+    // In Edit PO mode? Cancel back to detail view
+    if (document.getElementById('editCustId')) {
+      if (selectedId) selectPO(selectedId);
+      return;
+    }
+    // Detail panel showing a PO? Clear it
+    const panel = document.getElementById('detailPanel');
+    if (panel && selectedId && !panel.querySelector('.empty')) {
+      panel.innerHTML = '<div class="empty">Select a PO from the queue to review</div>';
+      selectedId = null;
+      return;
+    }
+  }
+
+  if (e.key === 'Enter' && !inInput && selectedId) {
+    e.preventDefault();
+    approvePO(selectedId);
+  }
+});
+</script>
+</body>
+</html>

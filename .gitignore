@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+*.pyo
+po_store/
+*.log
+.DS_Store
+artifacts/
+scripts/build_batch_payloads.py
