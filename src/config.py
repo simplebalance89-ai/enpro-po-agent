@@ -82,9 +82,14 @@ class Settings(BaseSettings):
     coupa_invoice_endpoint: str = ""
     coupa_invoice_api_key: str = ""
 
+    # ── Supabase ──
+    supabase_url: str = ""
+    supabase_key: str = ""  # service role key (server-side writes)
+
     # ── Persistent Storage ──
     # Azure Files mount at /app/data (Container App) or Render disk
-    # Bicep injects: CROSSWALK_DIR, CISM_OUTPUT_DIR, CISM_SO_OUTPUT_DIR
+    # With Supabase migration, disk is only needed for CISM CSV temp files.
+    data_dir: str = "/app/data"
     cism_output_dir: str = "/app/data/cism_output"
     cism_so_output_dir: str = "/app/data/cism_so_output"
     crosswalk_dir: str = "/app/data/crosswalks"

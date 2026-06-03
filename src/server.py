@@ -99,27 +99,35 @@ async def _require_api_key(x_api_key: Optional[str] = Header(default=None)):
 
 
 async def _log_audit(intake_id: str, action: str, actor: str, details: str = ""):
-    """Write an audit log entry to audit.db."""
+    """Write an audit log entry to Supabase audit_log table.
+
+    Required table (run once in Supabase SQL editor):
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id         BIGSERIAL PRIMARY KEY,
+            intake_id  TEXT,
+            action     TEXT,
+            actor      TEXT,
+            timestamp  TEXT,
+            details    TEXT,
+            ip_address TEXT
+        );
+    """
     try:
-        db_path = os.path.join(settings.data_dir, "audit.db")
-        conn = sqlite3.connect(db_path)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS audit_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                intake_id TEXT,
-                action TEXT,
-                actor TEXT,
-                timestamp TEXT,
-                details TEXT,
-                ip_address TEXT
-            )
-        """)
-        conn.execute("""
-            INSERT INTO audit_log (intake_id, action, actor, timestamp, details, ip_address)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (intake_id, action, actor, datetime.utcnow().isoformat(), details, ""))
-        conn.commit()
-        conn.close()
+        from supabase import create_client
+        _url = os.environ.get("SUPABASE_URL", settings.supabase_url)
+        _key = os.environ.get("SUPABASE_KEY", settings.supabase_key)
+        if not _url or not _key:
+            logger.warning("SUPABASE_URL/KEY not set — audit log skipped")
+            return
+        client = create_client(_url, _key)
+        client.table("audit_log").insert({
+            "intake_id":  intake_id,
+            "action":     action,
+            "actor":      actor,
+            "timestamp":  datetime.utcnow().isoformat(),
+            "details":    details,
+            "ip_address": "",
+        }).execute()
     except Exception as e:
         logger.error(f"Audit log failed: {e}")
 
@@ -2344,27 +2352,22 @@ async def load_demo_data():
 
 @app.get("/api/v1/audit")
 async def get_audit_log(limit: int = 100):
-    """Return audit log entries, newest first."""
+    """Return audit log entries from Supabase, newest first."""
     try:
-        db_path = os.path.join(settings.data_dir, "audit.db")
-        conn = sqlite3.connect(db_path)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS audit_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                intake_id TEXT,
-                action TEXT,
-                actor TEXT,
-                timestamp TEXT,
-                details TEXT,
-                ip_address TEXT
-            )
-        """)
-        rows = conn.execute(
-            "SELECT id, intake_id, action, actor, timestamp, details FROM audit_log ORDER BY timestamp DESC LIMIT ?",
-            (limit,)
-        ).fetchall()
-        conn.close()
-        return [{"id": r[0], "intake_id": r[1], "action": r[2], "actor": r[3], "timestamp": r[4], "details": r[5]} for r in rows]
+        from supabase import create_client
+        _url = os.environ.get("SUPABASE_URL", settings.supabase_url)
+        _key = os.environ.get("SUPABASE_KEY", settings.supabase_key)
+        if not _url or not _key:
+            return []
+        client = create_client(_url, _key)
+        resp = (
+            client.table("audit_log")
+            .select("id, intake_id, action, actor, timestamp, details")
+            .order("timestamp", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return resp.data or []
     except Exception as e:
         logger.error(f"Audit log read failed: {e}")
         return []
