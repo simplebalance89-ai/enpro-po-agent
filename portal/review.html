@@ -20,8 +20,9 @@
             align-items: center;
         }
         .header h1 { font-size: 1.5rem; font-weight: 600; }
+        .header-actions { display: flex; align-items: center; gap: 0.75rem; }
         .header .user { font-size: 0.875rem; opacity: 0.9; }
-        .header .refresh-btn {
+        .refresh-btn {
             background: rgba(255,255,255,0.2);
             border: none;
             color: white;
@@ -30,25 +31,46 @@
             cursor: pointer;
             font-size: 0.875rem;
         }
-        .header .refresh-btn:hover { background: rgba(255,255,255,0.3); }
-        .header .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        
+        .refresh-btn:hover { background: rgba(255,255,255,0.3); }
+        .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-approve-all {
+            background: #10b981;
+            border: none;
+            color: white;
+            padding: 0.5rem 1.1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 600;
+            display: none;
+        }
+        .btn-approve-all:hover { background: #059669; }
+        .btn-approve-all:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-download-batch {
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.4);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            display: none;
+        }
+        .btn-download-batch:hover { background: rgba(255,255,255,0.25); }
+
         .container {
             display: grid;
             grid-template-columns: 320px 1fr;
             height: calc(100vh - 60px);
         }
-        
+
         .sidebar {
             background: white;
             border-right: 1px solid #e2e8f0;
             display: flex;
             flex-direction: column;
         }
-        .queue-stats {
-            padding: 1rem;
-            border-bottom: 1px solid #e2e8f0;
-        }
+        .queue-stats { padding: 1rem; border-bottom: 1px solid #e2e8f0; }
         .stat-row {
             display: flex;
             justify-content: space-between;
@@ -64,11 +86,8 @@
         .stat-red { background: #fee2e2; color: #991b1b; }
         .stat-yellow { background: #fef3c7; color: #92400e; }
         .stat-green { background: #d1fae5; color: #065f46; }
-        
-        .filter-tabs {
-            display: flex;
-            border-bottom: 1px solid #e2e8f0;
-        }
+
+        .filter-tabs { display: flex; border-bottom: 1px solid #e2e8f0; }
         .filter-tab {
             flex: 1;
             padding: 0.75rem;
@@ -83,11 +102,8 @@
             border-right: none;
         }
         .filter-tab:hover { background: #f7fafc; }
-        .filter-tab.active {
-            border-bottom-color: #3182ce;
-            color: #3182ce;
-        }
-        
+        .filter-tab.active { border-bottom-color: #3182ce; color: #3182ce; }
+
         .po-list { flex: 1; overflow-y: auto; }
         .po-item {
             padding: 1rem;
@@ -123,7 +139,7 @@
         .po-source.coupa { background: #e0e7ff; color: #3730a3; }
         .po-source.vega { background: #fce7f3; color: #9d174d; }
         .po-source.email { background: #f3f4f6; color: #374151; }
-        
+
         .main { padding: 2rem; overflow-y: auto; }
         .empty-state { text-align: center; padding: 4rem; color: #64748b; }
         .empty-state-icon { font-size: 48px; margin-bottom: 1rem; }
@@ -139,11 +155,7 @@
             justify-content: space-between;
             align-items: flex-start;
         }
-        .po-title {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
+        .po-title { display: flex; align-items: center; gap: 0.75rem; }
         .po-title h2 { font-size: 1.25rem; font-weight: 600; }
         .badge {
             padding: 0.25rem 0.75rem;
@@ -157,7 +169,7 @@
         .badge-ariba { background: #dbeafe; color: #1e40af; }
         .badge-coupa { background: #e0e7ff; color: #3730a3; }
         .badge-vega { background: #fce7f3; color: #9d174d; }
-        
+
         .po-meta {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -169,7 +181,7 @@
         .meta-item dt { font-size: 0.75rem; color: #64748b; text-transform: uppercase; }
         .meta-item dd { font-size: 0.875rem; font-weight: 500; margin-top: 0.25rem; }
         .meta-item .unknown { color: #94a3b8; font-style: italic; }
-        
+
         .po-lines { padding: 1.5rem; }
         .lines-header {
             display: flex;
@@ -178,7 +190,7 @@
             margin-bottom: 1rem;
         }
         .lines-header h3 { font-size: 1rem; font-weight: 600; }
-        
+
         table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
         th {
             text-align: left;
@@ -189,7 +201,7 @@
         }
         td { padding: 0.75rem; border-bottom: 1px solid #f1f5f9; }
         tr:hover { background: #f8fafc; }
-        
+
         .line-status {
             display: inline-flex;
             align-items: center;
@@ -202,10 +214,10 @@
         .line-status.matched { background: #d1fae5; color: #065f46; }
         .line-status.partial { background: #fef3c7; color: #92400e; }
         .line-status.unmatched { background: #fee2e2; color: #991b1b; }
-        
+
         .line-match { font-size: 0.75rem; color: #64748b; }
         .line-match strong { color: #334155; }
-        
+
         .actions {
             padding: 1.5rem;
             border-top: 1px solid #e2e8f0;
@@ -229,306 +241,688 @@
         .btn-approve { background: #1a365d; color: white; }
         .btn-approve:hover { background: #2c5282; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-        
+
         .alert { padding: 1rem 1.5rem; border-bottom: 1px solid #e2e8f0; }
         .alert-red { background: #fef2f2; color: #991b1b; }
         .alert-yellow { background: #fffbeb; color: #92400e; }
         .alert-green { background: #f0fdf4; color: #166534; }
         .alert h4 { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.25rem; }
         .alert p { font-size: 0.875rem; }
-        
+
         .loading { text-align: center; padding: 2rem; color: #64748b; }
         .error { background: #fef2f2; color: #991b1b; padding: 1rem; border-radius: 6px; margin: 1rem; }
         .success { background: #f0fdf4; color: #166534; padding: 1rem; border-radius: 6px; margin: 1rem; }
+
+        /* ── Batch Modal ─────────────────────────────────────────────────── */
+        #batch-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        #batch-modal.open { display: flex; }
+        .modal-box {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+            width: min(860px, 92vw);
+            max-height: 88vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .modal-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h2 { font-size: 1.1rem; font-weight: 600; }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.4rem;
+            cursor: pointer;
+            color: #64748b;
+            line-height: 1;
+            padding: 0 0.25rem;
+        }
+        .modal-close:hover { color: #1a365d; }
+        .modal-summary {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #e2e8f0;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+        }
+        .summary-card {
+            background: #f8fafc;
+            border-radius: 6px;
+            padding: 0.875rem 1rem;
+            text-align: center;
+        }
+        .summary-card .num { font-size: 1.75rem; font-weight: 700; color: #1a365d; }
+        .summary-card .lbl { font-size: 0.75rem; color: #64748b; margin-top: 0.25rem; }
+        .modal-po-list {
+            padding: 0.75rem 1.5rem;
+            border-bottom: 1px solid #e2e8f0;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+        .modal-po-chip {
+            display: inline-block;
+            background: #d1fae5;
+            color: #065f46;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            margin: 0.2rem 0.25rem 0.2rem 0;
+        }
+        .modal-payload-section {
+            padding: 0.75rem 1.5rem 0;
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-payload-section h3 { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.5rem; color: #334155; }
+        .payload-preview {
+            flex: 1;
+            background: #0f1117;
+            color: #a0aec0;
+            font-family: 'SF Mono', 'Consolas', monospace;
+            font-size: 0.72rem;
+            line-height: 1.55;
+            padding: 1rem;
+            border-radius: 6px;
+            overflow-y: auto;
+            white-space: pre;
+            max-height: 280px;
+        }
+        .modal-actions {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            gap: 0.75rem;
+            justify-content: flex-end;
+            align-items: center;
+        }
+        .btn-download {
+            background: #1a365d;
+            color: white;
+            padding: 0.625rem 1.25rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+        }
+        .btn-download:hover { background: #2c5282; }
+        .btn-fire {
+            background: #10b981;
+            color: white;
+            padding: 0.625rem 1.25rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+        }
+        .btn-fire:hover { background: #059669; }
+        .btn-fire:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-cancel {
+            background: #f1f5f9;
+            color: #475569;
+            padding: 0.625rem 1.25rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+        }
+        .btn-cancel:hover { background: #e2e8f0; }
+        .fire-status {
+            font-size: 0.8rem;
+            color: #64748b;
+            flex: 1;
+        }
+        .fire-status.success { color: #065f46; }
+        .fire-status.error { color: #991b1b; }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>🔧 EnPro Order Management System</h1>
-        <div style="display: flex; align-items: center; gap: 1rem;">
-            <button class="refresh-btn" onclick="loadQueue()" id="refresh-btn">🔄 Refresh</button>
-            <div class="user">Brittany | PO Review</div>
+
+<!-- ── Batch Approve Modal ───────────────────────────────────────────────── -->
+<div id="batch-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2 id="modal-title">Batch P21 Payload — Ready</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+
+    <div class="modal-summary">
+      <div class="summary-card">
+        <div class="num" id="modal-included">—</div>
+        <div class="lbl">POs Approved</div>
+      </div>
+      <div class="summary-card">
+        <div class="num" id="modal-transactions">—</div>
+        <div class="lbl">Transactions in Payload</div>
+      </div>
+      <div class="summary-card">
+        <div class="num" id="modal-skipped">—</div>
+        <div class="lbl">Skipped (validation)</div>
+      </div>
+    </div>
+
+    <div class="modal-po-list" id="modal-po-chips"></div>
+
+    <div class="modal-payload-section">
+      <h3>Batch Payload Preview</h3>
+      <div class="payload-preview" id="payload-preview">Loading...</div>
+    </div>
+
+    <div class="modal-actions">
+      <span class="fire-status" id="fire-status"></span>
+      <button class="btn-cancel" onclick="closeModal()">Close</button>
+      <button class="btn-download" id="btn-dl" onclick="downloadBatchFromModal()">⬇ Download Batch JSON</button>
+      <button class="btn-fire" id="btn-fire" onclick="fireToP21()" disabled>⚡ Fire All to P21</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Main Layout ───────────────────────────────────────────────────────── -->
+<div class="header">
+    <h1>🔧 EnPro Order Management System</h1>
+    <div class="header-actions">
+        <button class="btn-download-batch" id="btn-download-batch" onclick="downloadApprovedBatch()">
+            ⬇ Download Batch JSON
+        </button>
+        <button class="btn-approve-all" id="btn-approve-all" onclick="approveAllGreen()">
+            ✓ Approve All Green (0)
+        </button>
+        <button class="refresh-btn" onclick="loadQueue()" id="refresh-btn">🔄 Refresh</button>
+        <div class="user">Brittany | PO Review</div>
+    </div>
+</div>
+
+<div class="container">
+    <aside class="sidebar">
+        <div class="queue-stats">
+            <h3 style="font-size: 0.875rem; font-weight: 600; margin-bottom: 0.75rem;">Review Queue</h3>
+            <div class="stat-row">
+                <span>🔴 Needs Review</span>
+                <span class="stat-count stat-red" id="count-red">-</span>
+            </div>
+            <div class="stat-row">
+                <span>🟡 Partial Match</span>
+                <span class="stat-count stat-yellow" id="count-yellow">-</span>
+            </div>
+            <div class="stat-row">
+                <span>🟢 Auto-Approved</span>
+                <span class="stat-count stat-green" id="count-green">-</span>
+            </div>
         </div>
-    </div>
-    
-    <div class="container">
-        <aside class="sidebar">
-            <div class="queue-stats">
-                <h3 style="font-size: 0.875rem; font-weight: 600; margin-bottom: 0.75rem;">Review Queue</h3>
-                <div class="stat-row">
-                    <span>🔴 Needs Review</span>
-                    <span class="stat-count stat-red" id="count-red">-</span>
-                </div>
-                <div class="stat-row">
-                    <span>🟡 Partial Match</span>
-                    <span class="stat-count stat-yellow" id="count-yellow">-</span>
-                </div>
-                <div class="stat-row">
-                    <span>🟢 Auto-Approved</span>
-                    <span class="stat-count stat-green" id="count-green">-</span>
+        <div class="filter-tabs">
+            <button class="filter-tab active" onclick="setFilter('all')">All</button>
+            <button class="filter-tab" onclick="setFilter('red')">Red</button>
+            <button class="filter-tab" onclick="setFilter('yellow')">Yellow</button>
+        </div>
+        <div class="po-list" id="po-list">
+            <div class="loading">Loading...</div>
+        </div>
+    </aside>
+
+    <main class="main" id="main-panel">
+        <div class="empty-state">
+            <div class="empty-state-icon">📋</div>
+            <p>Select a PO from the queue to review</p>
+        </div>
+    </main>
+</div>
+
+<script>
+const API_BASE = window.location.origin + '/api/v1';
+
+let currentPOs    = [];
+let currentPO     = null;
+let currentFilter = 'all';
+
+// Holds the batch JSON fetched during approveAllGreen for re-download
+let _batchJson     = null;
+let _batchFilename = 'p21_payload_batch.json';
+let _batchIds      = [];
+
+// ── Queue loading ──────────────────────────────────────────────────────────
+
+async function loadQueue() {
+    const btn = document.getElementById('refresh-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Loading...';
+
+    try {
+        const res = await fetch(`${API_BASE}/review/queue`, { credentials: 'include' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        currentPOs = await res.json();
+        updateStats();
+        renderPOList();
+    } catch (err) {
+        document.getElementById('po-list').innerHTML =
+            `<div class="error">Error loading queue: ${err.message}</div>`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '🔄 Refresh';
+    }
+}
+
+function updateStats() {
+    const red    = currentPOs.filter(p => p.confidence === 'red').length;
+    const yellow = currentPOs.filter(p => p.confidence === 'yellow').length;
+    const green  = currentPOs.filter(p => p.confidence === 'green').length;
+
+    document.getElementById('count-red').textContent    = red;
+    document.getElementById('count-yellow').textContent = yellow;
+    document.getElementById('count-green').textContent  = green;
+
+    // Show/hide Approve All button
+    const approveBtn = document.getElementById('btn-approve-all');
+    if (green > 0) {
+        approveBtn.style.display = 'block';
+        approveBtn.textContent   = `✓ Approve All Green (${green})`;
+    } else {
+        approveBtn.style.display = 'none';
+    }
+}
+
+// ── Filter / list ──────────────────────────────────────────────────────────
+
+function setFilter(filter) {
+    currentFilter = filter;
+    document.querySelectorAll('.filter-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.textContent.toLowerCase().includes(filter));
+    });
+    renderPOList();
+}
+
+function renderPOList() {
+    const list = document.getElementById('po-list');
+    let filtered = currentFilter === 'all'
+        ? currentPOs
+        : currentPOs.filter(p => p.confidence === currentFilter);
+
+    if (filtered.length === 0) {
+        list.innerHTML = '<div class="empty-state">No POs in queue</div>';
+        return;
+    }
+
+    list.innerHTML = filtered.map(po => `
+        <div class="po-item ${currentPO?.intake_id === po.intake_id ? 'active' : ''}"
+             onclick="selectPO('${po.intake_id}')">
+            <span class="po-indicator ${po.confidence}"></span>
+            <span class="po-number">${po.po_number}</span>
+            <div class="po-vendor">${po.ship_to || po.customer_p21 || 'Unknown'}</div>
+            <div class="po-time">${new Date(po.received).toLocaleString()}</div>
+            <span class="po-source ${po.source}">${po.source}</span>
+        </div>
+    `).join('');
+}
+
+async function selectPO(intakeId) {
+    currentPO = currentPOs.find(p => p.intake_id === intakeId);
+    renderPOList();
+    renderPODetailFromQueue(currentPO);
+}
+
+// ── PO detail view ─────────────────────────────────────────────────────────
+
+function getConfidenceBadge(conf) {
+    const labels = {
+        green:  'GREEN — Ready for Import',
+        yellow: 'YELLOW — Review Required',
+        red:    'RED — Manual Entry Needed'
+    };
+    return `<span class="badge badge-${conf}">${labels[conf] || conf}</span>`;
+}
+
+function getSourceBadge(source) {
+    return `<span class="badge badge-${source}">${source.toUpperCase()}</span>`;
+}
+
+function renderPODetailFromQueue(po) {
+    const panel = document.getElementById('main-panel');
+    if (!po) {
+        panel.innerHTML = `<div class="empty-state">
+            <div class="empty-state-icon">📋</div>
+            <p>Select a PO from the queue to review</p>
+        </div>`;
+        return;
+    }
+
+    let alertHtml = '';
+    if (po.confidence === 'red') {
+        alertHtml = `<div class="alert alert-red">
+            <h4>⚠️ Attention Required</h4>
+            <p>This PO has unmatched items or an unknown customer. Map to P21 IDs or reject.</p>
+        </div>`;
+    } else if (po.confidence === 'yellow') {
+        alertHtml = `<div class="alert alert-yellow">
+            <h4>Review Recommended</h4>
+            <p>Some items need verification. Confirm mappings before approving.</p>
+        </div>`;
+    } else {
+        alertHtml = `<div class="alert alert-green">
+            <h4>✓ Ready for Import</h4>
+            <p>All items matched with high confidence. Can be batch-approved with "Approve All Green".</p>
+        </div>`;
+    }
+
+    const lines = po.lines || [];
+    const linesHtml = lines.length ? `
+        <table>
+            <thead><tr>
+                <th>#</th><th>Part Number</th><th>Description</th>
+                <th>Qty</th><th>Price</th><th>P21 Item</th>
+            </tr></thead>
+            <tbody>${lines.map(l => `
+                <tr>
+                    <td>${l.line_no}</td>
+                    <td><code style="font-size:0.75rem">${l.supplier_part_id || ''}</code></td>
+                    <td>${l.item_description || '—'}</td>
+                    <td>${l.qty_ordered}</td>
+                    <td>$${parseFloat(l.unit_price||0).toFixed(2)}</td>
+                    <td>
+                        ${l.item_id_p21
+                            ? `<span class="line-status matched">✓ ${l.item_id_p21}</span>`
+                            : `<span class="line-status unmatched">Not mapped</span>`}
+                    </td>
+                </tr>`).join('')}
+            </tbody>
+        </table>` : `<p style="color:#94a3b8;font-size:0.875rem">Line items not available in queue view.</p>`;
+
+    panel.innerHTML = `
+        <div class="po-detail">
+            ${alertHtml}
+            <div class="po-header">
+                <div class="po-title">
+                    <h2>PO #${po.po_number}</h2>
+                    ${getConfidenceBadge(po.confidence)}
+                    ${getSourceBadge(po.source)}
                 </div>
             </div>
-            <div class="filter-tabs">
-                <button class="filter-tab active" onclick="setFilter('all')">All</button>
-                <button class="filter-tab" onclick="setFilter('red')">Red</button>
-                <button class="filter-tab" onclick="setFilter('yellow')">Yellow</button>
-            </div>
-            <div class="po-list" id="po-list">
-                <div class="loading">Loading...</div>
-            </div>
-        </aside>
-        
-        <main class="main" id="main-panel">
-            <div class="empty-state">
-                <div class="empty-state-icon">📋</div>
-                <p>Select a PO from the queue to review</p>
-            </div>
-        </main>
-    </div>
-
-    <script>
-        // API base URL - auto-detect from current host
-        const API_BASE = window.location.origin + '/api/v1';
-        
-        let currentPOs = [];
-        let currentPO = null;
-        let currentFilter = 'all';
-
-        async function loadQueue() {
-            const btn = document.getElementById('refresh-btn');
-            btn.disabled = true;
-            btn.textContent = '⏳ Loading...';
-            
-            try {
-                const res = await fetch(`${API_BASE}/review/queue`);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                
-                currentPOs = await res.json();
-                updateStats();
-                renderPOList();
-            } catch (err) {
-                document.getElementById('po-list').innerHTML = `
-                    <div class="error">Error loading queue: ${err.message}</div>
-                `;
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '🔄 Refresh';
-            }
-        }
-
-        function updateStats() {
-            const red = currentPOs.filter(p => p.confidence === 'red').length;
-            const yellow = currentPOs.filter(p => p.confidence === 'yellow').length;
-            const green = currentPOs.filter(p => p.confidence === 'green').length;
-            
-            document.getElementById('count-red').textContent = red;
-            document.getElementById('count-yellow').textContent = yellow;
-            document.getElementById('count-green').textContent = green;
-        }
-
-        function setFilter(filter) {
-            currentFilter = filter;
-            document.querySelectorAll('.filter-tab').forEach(tab => {
-                tab.classList.toggle('active', tab.textContent.toLowerCase().includes(filter));
-            });
-            renderPOList();
-        }
-
-        function renderPOList() {
-            const list = document.getElementById('po-list');
-            
-            let filtered = currentPOs;
-            if (currentFilter !== 'all') {
-                filtered = currentPOs.filter(p => p.confidence === currentFilter);
-            }
-            
-            if (filtered.length === 0) {
-                list.innerHTML = '<div class="empty-state">No POs in queue</div>';
-                return;
-            }
-            
-            list.innerHTML = filtered.map(po => `
-                <div class="po-item ${currentPO?.intake_id === po.intake_id ? 'active' : ''}" 
-                     onclick="selectPO('${po.intake_id}')">
-                    <span class="po-indicator ${po.confidence}"></span>
-                    <span class="po-number">${po.po_number}</span>
-                    <div class="po-vendor">${po.vendor_raw || 'Unknown Vendor'}</div>
-                    <div class="po-time">${new Date(po.received).toLocaleString()}</div>
-                    <span class="po-source ${po.source}">${po.source}</span>
+            <div class="po-meta">
+                <div class="meta-item">
+                    <dt>Ship-To</dt>
+                    <dd>${po.ship_to || po.header?.ship2_name || '—'}</dd>
                 </div>
-            `).join('');
-        }
-
-        async function selectPO(intakeId) {
-            currentPO = currentPOs.find(p => p.intake_id === intakeId);
-            renderPOList();
-            renderPODetail();
-        }
-
-        function getConfidenceBadge(conf) {
-            const labels = { green: 'GREEN — Auto-approve', yellow: 'YELLOW — Review required', red: 'RED — Manual entry' };
-            return `<span class="badge badge-${conf}">${labels[conf]}</span>`;
-        }
-
-        function getSourceBadge(source) {
-            return `<span class="badge badge-${source}">${source.toUpperCase()}</span>`;
-        }
-
-        function renderPODetail() {
-            const panel = document.getElementById('main-panel');
-            if (!currentPO) {
-                panel.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-state-icon">📋</div>
-                        <p>Select a PO from the queue to review</p>
-                    </div>`;
-                return;
-            }
-
-            // Show loading state if we need to fetch full details
-            panel.innerHTML = '<div class="loading">Loading PO details...</div>';
-            
-            // For now, show what we have from the queue
-            // In full implementation, fetch /api/v1/review/po/{intake_id} here
-            renderPODetailFromQueue(currentPO);
-        }
-        
-        function renderPODetailFromQueue(po) {
-            const panel = document.getElementById('main-panel');
-            
-            // Build alert based on confidence
-            let alertHtml = '';
-            if (po.confidence === 'red') {
-                alertHtml = `
-                    <div class="alert alert-red">
-                        <h4>⚠️ Attention Required</h4>
-                        <p>This PO has unmatched items or an unknown vendor. Please map to P21 IDs or reject for manual entry.</p>
-                    </div>`;
-            } else if (po.confidence === 'yellow') {
-                alertHtml = `
-                    <div class="alert alert-yellow">
-                        <h4>Review Recommended</h4>
-                        <p>Some items need verification. Confirm mappings before approving.</p>
-                    </div>`;
-            } else {
-                alertHtml = `
-                    <div class="alert alert-green">
-                        <h4>✓ Ready for Import</h4>
-                        <p>All items matched with high confidence. Ready to approve.</p>
-                    </div>`;
-            }
-
-            panel.innerHTML = `
-                <div class="po-detail">
-                    ${alertHtml}
-                    
-                    <div class="po-header">
-                        <div class="po-title">
-                            <h2>PO #${po.po_number}</h2>
-                            ${getConfidenceBadge(po.confidence)}
-                            ${getSourceBadge(po.source)}
-                        </div>
-                    </div>
-                    
-                    <div class="po-meta">
-                        <div class="meta-item">
-                            <dt>Vendor (Source)</dt>
-                            <dd>${po.vendor_raw || 'Unknown'}</dd>
-                        </div>
-                        <div class="meta-item">
-                            <dt>Vendor (P21)</dt>
-                            <dd class="${po.vendor_p21 ? '' : 'unknown'}">
-                                ${po.vendor_p21 || 'Not mapped'}
-                            </dd>
-                        </div>
-                        <div class="meta-item">
-                            <dt>Received</dt>
-                            <dd>${new Date(po.received).toLocaleString()}</dd>
-                        </div>
-                        <div class="meta-item">
-                            <dt>Intake ID</dt>
-                            <dd style="font-family: monospace; font-size: 0.75rem;">${po.intake_id}</dd>
-                        </div>
-                    </div>
-                    
-                    <div class="po-lines">
-                        <div class="lines-header">
-                            <h3>Line Items</h3>
-                            <span style="color: #64748b; font-size: 0.875rem;">
-                                Detailed view requires full PO fetch
-                            </span>
-                        </div>
-                        <div style="padding: 2rem; text-align: center; color: #64748b;">
-                            <p>Line item details available via API</p>
-                            <code style="background: #f1f5f9; padding: 0.25rem 0.5rem; border-radius: 4px;">
-                                GET /api/v1/review/po/${po.intake_id}
-                            </code>
-                        </div>
-                    </div>
-                    
-                    <div class="actions">
-                        <button class="btn btn-reject" onclick="rejectPO()">Reject</button>
-                        <button class="btn btn-approve" onclick="approvePO()" ${po.confidence === 'red' ? 'disabled' : ''}>
-                            ${po.confidence === 'green' ? 'Approve & Import' : 'Approve After Review'}
-                        </button>
-                    </div>
+                <div class="meta-item">
+                    <dt>Customer (P21)</dt>
+                    <dd class="${po.customer_p21 ? '' : 'unknown'}">${po.customer_p21 || 'Not mapped'}</dd>
                 </div>
-            `;
+                <div class="meta-item">
+                    <dt>Received</dt>
+                    <dd>${new Date(po.received).toLocaleString()}</dd>
+                </div>
+                <div class="meta-item">
+                    <dt>Intake ID</dt>
+                    <dd style="font-family:monospace;font-size:0.75rem">${po.intake_id}</dd>
+                </div>
+            </div>
+            <div class="po-lines">
+                <div class="lines-header">
+                    <h3>Line Items (${lines.length})</h3>
+                </div>
+                ${linesHtml}
+            </div>
+            <div class="actions">
+                <button class="btn btn-reject" onclick="rejectPO()">Reject</button>
+                <button class="btn btn-approve" onclick="approvePO()"
+                    ${po.confidence === 'red' ? 'disabled' : ''}>
+                    ${po.confidence === 'green' ? 'Approve & Import' : 'Approve After Review'}
+                </button>
+            </div>
+        </div>`;
+}
+
+// ── Single PO approve / reject ─────────────────────────────────────────────
+
+async function approvePO() {
+    if (!confirm(`Approve PO #${currentPO.po_number}?`)) return;
+    try {
+        const res = await fetch(`${API_BASE}/review/po/${currentPO.intake_id}/approve`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', 'X-Actor-Name': 'Brittany' },
+            body: JSON.stringify({ reviewer: 'Brittany', notes: '' })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        currentPOs = currentPOs.filter(p => p.intake_id !== currentPO.intake_id);
+        currentPO  = null;
+        updateStats();
+        renderPOList();
+        renderPODetailFromQueue(null);
+    } catch (err) {
+        alert(`Error approving PO: ${err.message}`);
+    }
+}
+
+async function rejectPO() {
+    const reason = prompt('Enter rejection reason:');
+    if (!reason) return;
+    try {
+        const res = await fetch(`${API_BASE}/review/po/${currentPO.intake_id}/reject`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', 'X-Actor-Name': 'Brittany' },
+            body: JSON.stringify({ reviewer: 'Brittany', reason })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        currentPOs = currentPOs.filter(p => p.intake_id !== currentPO.intake_id);
+        currentPO  = null;
+        updateStats();
+        renderPOList();
+        renderPODetailFromQueue(null);
+    } catch (err) {
+        alert(`Error rejecting PO: ${err.message}`);
+    }
+}
+
+// ── Batch Approve All Green ────────────────────────────────────────────────
+
+async function approveAllGreen() {
+    const greenPOs = currentPOs.filter(p => p.confidence === 'green');
+    if (greenPOs.length === 0) { alert('No green POs to approve.'); return; }
+
+    const btn = document.getElementById('btn-approve-all');
+    btn.disabled = true;
+    btn.textContent = '⏳ Approving...';
+
+    // Collect intake_ids before we fire
+    const intakeIds = greenPOs.map(p => p.intake_id);
+    _batchIds = intakeIds;
+
+    try {
+        // Step 1: Bulk approve all green POs
+        await fetch(`${API_BASE}/review/bulk-approve`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', 'X-Actor-Name': 'Brittany' }
+        });
+
+        btn.textContent = '⏳ Building payload...';
+
+        // Step 2: Build batch payload (approved_only:false — we already approved them)
+        const batchRes = await fetch(`${API_BASE}/p21/payload/batch/download`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ intake_ids: intakeIds, approved_only: false })
+        });
+
+        if (!batchRes.ok) {
+            const err = await batchRes.json().catch(() => ({}));
+            throw new Error(err.detail?.message || err.detail || `HTTP ${batchRes.status}`);
         }
 
-        async function approvePO() {
-            if (!confirm(`Approve PO #${currentPO.po_number} and import to P21?`)) return;
-            
-            try {
-                const res = await fetch(`${API_BASE}/review/po/${currentPO.intake_id}/approve`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ reviewer: 'Brittany', notes: '' })
-                });
-                
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                
-                // Remove from list and refresh
-                currentPOs = currentPOs.filter(p => p.intake_id !== currentPO.intake_id);
-                currentPO = null;
-                updateStats();
-                renderPOList();
-                renderPODetail();
-                
-            } catch (err) {
-                alert(`Error approving PO: ${err.message}`);
-            }
+        // Read the response — it's JSON with Content-Disposition: attachment
+        const batchText = await batchRes.text();
+        _batchJson = JSON.parse(batchText);
+
+        // Derive filename from Content-Disposition or fallback
+        const cd = batchRes.headers.get('Content-Disposition') || '';
+        const m  = cd.match(/filename="([^"]+)"/);
+        _batchFilename = m ? m[1] : `p21_payload_batch_${Date.now()}.json`;
+
+        // Step 3: Show modal
+        showBatchModal(intakeIds, _batchJson, greenPOs);
+
+        // Update sidebar — remove approved POs from queue display
+        currentPOs = currentPOs.filter(p => !intakeIds.includes(p.intake_id));
+        currentPO  = null;
+        updateStats();
+        renderPOList();
+        renderPODetailFromQueue(null);
+
+        // Show the persistent download button in header
+        document.getElementById('btn-download-batch').style.display = 'block';
+
+    } catch (err) {
+        alert(`Batch approve failed: ${err.message}`);
+    } finally {
+        btn.disabled = false;
+        updateStats(); // re-set text
+    }
+}
+
+function showBatchModal(intakeIds, batchJson, greenPOs) {
+    const txns = batchJson?.Transactions?.length ?? 0;
+
+    document.getElementById('modal-included').textContent    = intakeIds.length;
+    document.getElementById('modal-transactions').textContent = txns;
+    document.getElementById('modal-skipped').textContent     = intakeIds.length - txns;
+
+    // PO chips
+    const chipHtml = greenPOs.map(po =>
+        `<span class="modal-po-chip">${po.po_number}</span>`
+    ).join('');
+    document.getElementById('modal-po-chips').innerHTML = chipHtml || '<em style="color:#94a3b8;font-size:0.8rem">No PO numbers available</em>';
+
+    // Payload preview — show full JSON (it's compact-ish for demo)
+    const preview = JSON.stringify(batchJson, null, 2);
+    document.getElementById('payload-preview').textContent = preview;
+
+    // Enable fire button only if P21 credentials are likely configured
+    document.getElementById('btn-fire').disabled = false;
+    document.getElementById('fire-status').textContent = '';
+
+    document.getElementById('batch-modal').classList.add('open');
+}
+
+function closeModal() {
+    document.getElementById('batch-modal').classList.remove('open');
+}
+
+// ── Download helpers ───────────────────────────────────────────────────────
+
+function downloadBatchFromModal() {
+    if (!_batchJson) return;
+    triggerDownload(JSON.stringify(_batchJson, null, 2), _batchFilename);
+}
+
+async function downloadApprovedBatch() {
+    // Download batch for all currently-approved POs (header button)
+    try {
+        const allRes = await fetch(`${API_BASE}/review/approved`, { credentials: 'include' });
+        const approved = await allRes.json();
+        if (!approved.length) { alert('No approved POs found.'); return; }
+
+        const ids = approved.map(p => p.intake_id);
+        const batchRes = await fetch(`${API_BASE}/p21/payload/batch/download`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ intake_ids: ids, approved_only: true })
+        });
+        if (!batchRes.ok) throw new Error(`HTTP ${batchRes.status}`);
+        const text = await batchRes.text();
+        const cd   = batchRes.headers.get('Content-Disposition') || '';
+        const m    = cd.match(/filename="([^"]+)"/);
+        const fn   = m ? m[1] : `p21_payload_batch_${Date.now()}.json`;
+        triggerDownload(text, fn);
+    } catch (err) {
+        alert(`Download failed: ${err.message}`);
+    }
+}
+
+function triggerDownload(content, filename) {
+    const blob = new Blob([content], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// ── Fire to P21 ────────────────────────────────────────────────────────────
+
+async function fireAllToP21() {
+    if (!_batchIds.length) return;
+    const fireBtn  = document.getElementById('btn-fire');
+    const statusEl = document.getElementById('fire-status');
+
+    fireBtn.disabled     = true;
+    fireBtn.textContent  = '⏳ Submitting...';
+    statusEl.className   = 'fire-status';
+    statusEl.textContent = 'Sending to P21...';
+
+    try {
+        const res = await fetch(`${API_BASE}/p21/submit/batch`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', 'X-Actor-Name': 'Brittany' },
+            body: JSON.stringify({ intake_ids: _batchIds, reviewer: 'Brittany', notes: 'Batch via portal' })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            statusEl.className   = 'fire-status error';
+            statusEl.textContent = `P21 error: ${data.detail || res.status}`;
+            fireBtn.disabled     = false;
+            fireBtn.textContent  = '⚡ Fire All to P21';
+            return;
         }
 
-        async function rejectPO() {
-            const reason = prompt('Enter rejection reason:');
-            if (!reason) return;
-            
-            try {
-                const res = await fetch(`${API_BASE}/review/po/${currentPO.intake_id}/reject`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ reviewer: 'Brittany', reason })
-                });
-                
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                
-                currentPOs = currentPOs.filter(p => p.intake_id !== currentPO.intake_id);
-                currentPO = null;
-                updateStats();
-                renderPOList();
-                renderPODetail();
-                
-            } catch (err) {
-                alert(`Error rejecting PO: ${err.message}`);
-            }
-        }
+        const success = (data.results || []).filter(r => r.success).length;
+        const failed  = (data.results || []).filter(r => !r.success).length;
+        statusEl.className   = failed ? 'fire-status error' : 'fire-status success';
+        statusEl.textContent = failed
+            ? `${success} submitted, ${failed} failed — check P21`
+            : `✓ ${success} Sales Orders created in P21`;
+        fireBtn.textContent = '✓ Submitted';
 
-        // Load queue on page load
-        loadQueue();
-        
-        // Auto-refresh every 30 seconds
-        setInterval(loadQueue, 30000);
-    </script>
+    } catch (err) {
+        statusEl.className   = 'fire-status error';
+        statusEl.textContent = `Error: ${err.message}`;
+        fireBtn.disabled     = false;
+        fireBtn.textContent  = '⚡ Fire All to P21';
+    }
+}
+
+// Close modal on backdrop click
+document.getElementById('batch-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+});
+
+// Load on start, auto-refresh every 30s
+loadQueue();
+setInterval(loadQueue, 30000);
+</script>
 </body>
 </html>
