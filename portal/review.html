@@ -1,928 +1,1073 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EnPro OMS — PO Review Portal</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f5f5;
-            color: #333;
-        }
-        .header {
-            background: #1a365d;
-            color: white;
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .header h1 { font-size: 1.5rem; font-weight: 600; }
-        .header-actions { display: flex; align-items: center; gap: 0.75rem; }
-        .header .user { font-size: 0.875rem; opacity: 0.9; }
-        .refresh-btn {
-            background: rgba(255,255,255,0.2);
-            border: none;
-            color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.875rem;
-        }
-        .refresh-btn:hover { background: rgba(255,255,255,0.3); }
-        .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-approve-all {
-            background: #10b981;
-            border: none;
-            color: white;
-            padding: 0.5rem 1.1rem;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.875rem;
-            font-weight: 600;
-            display: none;
-        }
-        .btn-approve-all:hover { background: #059669; }
-        .btn-approve-all:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-download-batch {
-            background: rgba(255,255,255,0.15);
-            border: 1px solid rgba(255,255,255,0.4);
-            color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.875rem;
-            display: none;
-        }
-        .btn-download-batch:hover { background: rgba(255,255,255,0.25); }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnPro PO Review Portal</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#0f1117; color:#e0e0e0; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+a { color:#60a5fa; text-decoration:none; }
 
-        .container {
-            display: grid;
-            grid-template-columns: 320px 1fr;
-            height: calc(100vh - 60px);
-        }
+/* ── Topbar ── */
+.topbar { background:#1a1d27; border-bottom:1px solid #2a2d3a; padding:0 20px; height:52px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; gap:16px; }
+.topbar-left  { display:flex; align-items:center; gap:12px; }
+.topbar-right { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+.topbar h1 { font-size:16px; font-weight:700; color:#fff; white-space:nowrap; }
+.src-badge { padding:2px 8px; border-radius:3px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+.src-badge.ariba  { background:#1e3a5f; color:#7dd3fc; border:1px solid #1e40af; }
+.src-badge.coupa  { background:#3f1e4a; color:#e9d5ff; border:1px solid #7c3aed; }
+.src-badge.direct { background:#1a2e1a; color:#86efac; border:1px solid #166534; }
+.stat-mini { text-align:center; }
+.stat-mini .sv { font-size:20px; font-weight:700; color:#fff; line-height:1; }
+.stat-mini .sl { font-size:9px; text-transform:uppercase; color:#475569; letter-spacing:.5px; margin-top:1px; }
+.divider { width:1px; height:28px; background:#2a2d3a; }
+.status-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:#4ade80; }
+.user-chip { font-size:11px; color:#94a3b8; display:flex; align-items:center; gap:5px; }
+.user-avatar { width:22px; height:22px; border-radius:50%; background:#1e3a5f; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:#7dd3fc; }
 
-        .sidebar {
-            background: white;
-            border-right: 1px solid #e2e8f0;
-            display: flex;
-            flex-direction: column;
-        }
-        .queue-stats { padding: 1rem; border-bottom: 1px solid #e2e8f0; }
-        .stat-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 0.5rem 0;
-            font-size: 0.875rem;
-        }
-        .stat-count {
-            font-weight: 600;
-            padding: 0.125rem 0.5rem;
-            border-radius: 999px;
-            font-size: 0.75rem;
-        }
-        .stat-red { background: #fee2e2; color: #991b1b; }
-        .stat-yellow { background: #fef3c7; color: #92400e; }
-        .stat-green { background: #d1fae5; color: #065f46; }
+/* ── Three-lane layout ── */
+.lanes { display:grid; grid-template-columns:290px 1fr 400px; flex:1; overflow:hidden; }
+.lane { display:flex; flex-direction:column; border-right:1px solid #2a2d3a; overflow:hidden; }
+.lane:last-child { border-right:none; }
+.lane-hdr { background:#141620; border-bottom:1px solid #2a2d3a; padding:10px 14px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+.lane-title { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; color:#475569; white-space:nowrap; }
+.lane-body { flex:1; overflow-y:auto; }
+.lane-ftr { background:#141620; border-top:1px solid #2a2d3a; padding:10px 14px; flex-shrink:0; }
 
-        .filter-tabs { display: flex; border-bottom: 1px solid #e2e8f0; }
-        .filter-tab {
-            flex: 1;
-            padding: 0.75rem;
-            text-align: center;
-            font-size: 0.75rem;
-            font-weight: 500;
-            cursor: pointer;
-            border-bottom: 2px solid transparent;
-            background: none;
-            border-top: none;
-            border-left: none;
-            border-right: none;
-        }
-        .filter-tab:hover { background: #f7fafc; }
-        .filter-tab.active { border-bottom-color: #3182ce; color: #3182ce; }
+/* ── Queue / Left lane ── */
+.filter-pills { display:flex; gap:3px; }
+.pill { padding:2px 9px; border-radius:10px; font-size:10px; font-weight:600; cursor:pointer; border:1px solid #2a2d3a; background:transparent; color:#64748b; }
+.pill.active  { background:#3b82f6; color:#fff; border-color:#3b82f6; }
+.po-item { padding:11px 14px; border-bottom:1px solid #1e2030; cursor:pointer; transition:background .1s; }
+.po-item:hover { background:#1a1d2a; }
+.po-item.selected { background:#1e2a4a; border-left:3px solid #3b82f6; padding-left:11px; }
+.po-num { font-weight:700; font-size:13px; color:#fff; }
+.po-meta { font-size:11px; color:#475569; margin-top:2px; }
+.po-conf { font-size:10px; margin-top:3px; font-weight:600; }
+.dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+.dot.green  { background:#4ade80; }
+.dot.yellow { background:#fbbf24; }
+.dot.red    { background:#f87171; }
+.src-tag { display:inline-block; padding:1px 5px; border-radius:3px; font-size:9px; font-weight:700; text-transform:uppercase; margin-left:5px; vertical-align:middle; }
+.src-tag.ariba  { background:#1e3a5f; color:#7dd3fc; }
+.src-tag.coupa  { background:#3f1e4a; color:#e9d5ff; }
+.src-tag.direct { background:#1a2e1a; color:#86efac; }
+.swim-lane-header { display:flex; justify-content:space-between; align-items:center; padding:5px 14px; font-size:9px; text-transform:uppercase; letter-spacing:1px; font-weight:700; border-bottom:1px solid #2a2d3a; position:sticky; top:0; z-index:2; }
+.swim-lane-header.needs-review     { background:#160e0e; color:#fb923c; }
+.swim-lane-header.ready-to-approve { background:#081608; color:#4ade80; }
+.swim-count { background:#334155; color:#94a3b8; padding:1px 6px; border-radius:8px; font-size:9px; font-weight:700; }
+.badge-count { background:#334155; color:#94a3b8; padding:1px 7px; border-radius:10px; font-size:10px; font-weight:700; margin-left:5px; }
 
-        .po-list { flex: 1; overflow-y: auto; }
-        .po-item {
-            padding: 1rem;
-            border-bottom: 1px solid #e2e8f0;
-            cursor: pointer;
-            transition: background 0.15s;
-        }
-        .po-item:hover { background: #f7fafc; }
-        .po-item.active { background: #ebf8ff; border-left: 3px solid #3182ce; }
-        .po-indicator {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            margin-right: 0.5rem;
-        }
-        .po-indicator.red { background: #ef4444; }
-        .po-indicator.yellow { background: #f59e0b; }
-        .po-indicator.green { background: #10b981; }
-        .po-number { font-weight: 600; font-size: 0.875rem; }
-        .po-vendor { font-size: 0.75rem; color: #64748b; margin-top: 0.25rem; }
-        .po-time { font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem; }
-        .po-source {
-            display: inline-block;
-            font-size: 0.625rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            padding: 0.125rem 0.375rem;
-            border-radius: 3px;
-            margin-top: 0.5rem;
-        }
-        .po-source.ariba { background: #dbeafe; color: #1e40af; }
-        .po-source.coupa { background: #e0e7ff; color: #3730a3; }
-        .po-source.vega { background: #fce7f3; color: #9d174d; }
-        .po-source.email { background: #f3f4f6; color: #374151; }
+/* ── Upload zone ── */
+.upload-mini { display:flex; flex-direction:column; gap:5px; }
+.upload-mini select, .upload-mini input[type="file"] { background:#0f1117; color:#e0e0e0; border:1px solid #2a2d3a; border-radius:4px; padding:4px 6px; font-size:11px; width:100%; }
+.upload-result { font-size:11px; color:#94a3b8; margin-top:4px; }
 
-        .main { padding: 2rem; overflow-y: auto; }
-        .empty-state { text-align: center; padding: 4rem; color: #64748b; }
-        .empty-state-icon { font-size: 48px; margin-bottom: 1rem; }
-        .po-detail {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        .po-header {
-            padding: 1.5rem;
-            border-bottom: 1px solid #e2e8f0;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-        }
-        .po-title { display: flex; align-items: center; gap: 0.75rem; }
-        .po-title h2 { font-size: 1.25rem; font-weight: 600; }
-        .badge {
-            padding: 0.25rem 0.75rem;
-            border-radius: 999px;
-            font-size: 0.75rem;
-            font-weight: 500;
-        }
-        .badge-red { background: #fee2e2; color: #991b1b; }
-        .badge-yellow { background: #fef3c7; color: #92400e; }
-        .badge-green { background: #d1fae5; color: #065f46; }
-        .badge-ariba { background: #dbeafe; color: #1e40af; }
-        .badge-coupa { background: #e0e7ff; color: #3730a3; }
-        .badge-vega { background: #fce7f3; color: #9d174d; }
+/* ── Center lane ── */
+.detail-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:#334155; text-align:center; padding:40px; }
+.detail-empty .de-icon { font-size:40px; margin-bottom:12px; }
+.detail-empty .de-title { font-size:14px; font-weight:600; color:#475569; margin-bottom:6px; }
+.detail-empty .de-sub { font-size:12px; color:#334155; }
+.sticky-bar { position:sticky; top:0; z-index:10; background:#1e2130; border-bottom:1px solid #2a2d3a; padding:10px 16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.po-quick-info { display:flex; align-items:center; gap:8px; flex-wrap:wrap; flex:1; min-width:0; }
+.detail-body { padding:16px 20px 24px; }
+.meta-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin:14px 0; }
+.meta-box { background:#141620; border-radius:6px; padding:10px 12px; }
+.meta-box .lbl { font-size:9px; text-transform:uppercase; color:#475569; letter-spacing:.5px; }
+.meta-box .val { font-size:13px; color:#fff; margin-top:3px; font-weight:500; }
+.meta-box .val.warn { color:#f87171; }
+table { width:100%; border-collapse:collapse; margin:10px 0; font-size:12px; }
+th { text-align:left; padding:7px 8px; color:#475569; font-size:10px; text-transform:uppercase; border-bottom:1px solid #2a2d3a; }
+td { padding:7px 8px; border-bottom:1px solid #1e2030; }
+tr:hover td { background:#141620; }
+.score-pill { font-size:10px; padding:2px 7px; border-radius:7px; }
+.score-pill.hi  { background:#0d3320; color:#4ade80; }
+.score-pill.mid { background:#332b00; color:#fbbf24; }
+.score-pill.lo  { background:#3b1111; color:#f87171; }
 
-        .po-meta {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 1rem;
-            padding: 1rem 1.5rem;
-            background: #f8fafc;
-            border-bottom: 1px solid #e2e8f0;
-        }
-        .meta-item dt { font-size: 0.75rem; color: #64748b; text-transform: uppercase; }
-        .meta-item dd { font-size: 0.875rem; font-weight: 500; margin-top: 0.25rem; }
-        .meta-item .unknown { color: #94a3b8; font-style: italic; }
+/* ── Badges ── */
+.badge-conf { display:inline-block; padding:2px 9px; border-radius:10px; font-size:10px; font-weight:700; }
+.badge-conf.green  { background:#0d3320; color:#4ade80; }
+.badge-conf.yellow { background:#332b00; color:#fbbf24; }
+.badge-conf.red    { background:#3b1111; color:#f87171; }
+.badge-valid { display:inline-block; padding:2px 9px; border-radius:8px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; }
+.badge-valid.batch_ready { background:#0d3320; color:#4ade80; }
+.badge-valid.needs_fix   { background:#3b1111; color:#f87171; }
+.badge-valid.unknown     { background:#1e2030; color:#64748b; }
 
-        .po-lines { padding: 1.5rem; }
-        .lines-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-        .lines-header h3 { font-size: 1rem; font-weight: 600; }
+/* ── Buttons ── */
+.btn { padding:7px 16px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; border:none; display:inline-flex; align-items:center; gap:5px; }
+.btn:disabled { opacity:.4; cursor:not-allowed; }
+.btn-green { background:#16a34a; color:#fff; } .btn-green:hover:not(:disabled) { background:#15803d; }
+.btn-red   { background:#dc2626; color:#fff; } .btn-red:hover:not(:disabled)   { background:#b91c1c; }
+.btn-gray  { background:#334155; color:#e2e8f0; } .btn-gray:hover:not(:disabled) { background:#475569; }
+.btn-blue  { background:#2563eb; color:#fff; } .btn-blue:hover:not(:disabled)  { background:#1d4ed8; }
+.btn-sm { padding:4px 11px; font-size:11px; }
 
-        table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
-        th {
-            text-align: left;
-            padding: 0.75rem;
-            font-weight: 500;
-            color: #64748b;
-            border-bottom: 1px solid #e2e8f0;
-        }
-        td { padding: 0.75rem; border-bottom: 1px solid #f1f5f9; }
-        tr:hover { background: #f8fafc; }
+/* ── Right lane — Payload ── */
+.right-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:#334155; text-align:center; padding:32px; }
+.right-empty .re-icon { font-size:36px; margin-bottom:10px; }
+#rightPanelJson {
+  font-family:'SF Mono',monospace; font-size:11px; line-height:1.65;
+  color:#a5f3fc; background:transparent; padding:14px 16px;
+  white-space:pre-wrap; word-break:break-word;
+  border:none; outline:none; resize:none; width:100%; height:100%;
+  display:block;
+}
+.payload-score { font-size:22px; font-weight:700; color:#4ade80; }
+.fire-btn { width:100%; justify-content:center; }
 
-        .line-status {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.375rem;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 500;
-        }
-        .line-status.matched { background: #d1fae5; color: #065f46; }
-        .line-status.partial { background: #fef3c7; color: #92400e; }
-        .line-status.unmatched { background: #fee2e2; color: #991b1b; }
+/* ── Validation errors ── */
+.validation-errors { background:#1c0a0a; border:1px solid #3b1111; border-radius:6px; padding:8px 12px; margin-bottom:10px; }
+.ve-title { font-size:9px; text-transform:uppercase; color:#f87171; letter-spacing:1px; font-weight:700; margin-bottom:3px; }
+.ve-item { font-size:11px; color:#fca5a5; padding:2px 0; }
+.ve-code { font-family:monospace; font-size:10px; background:#2d0f0f; padding:1px 5px; border-radius:3px; margin-right:5px; }
 
-        .line-match { font-size: 0.75rem; color: #64748b; }
-        .line-match strong { color: #334155; }
+/* ── Toasts ── */
+.toast-container { position:fixed; top:14px; right:14px; z-index:9999; display:flex; flex-direction:column; gap:8px; }
+.toast { padding:11px 16px; border-radius:6px; font-size:13px; font-weight:600; color:#fff; box-shadow:0 4px 12px rgba(0,0,0,.4); animation:toastIn .2s ease; min-width:220px; max-width:360px; }
+.toast.success { background:#16a34a; }
+.toast.error   { background:#dc2626; }
+.toast.warn    { background:#ca8a04; }
+.toast.info    { background:#2563eb; }
+@keyframes toastIn  { from { transform:translateX(110%); opacity:0; } to { transform:translateX(0); opacity:1; } }
+@keyframes toastOut { from { transform:translateX(0); opacity:1; } to { transform:translateX(110%); opacity:0; } }
+.toast.hiding { animation:toastOut .2s ease forwards; }
 
-        .actions {
-            padding: 1.5rem;
-            border-top: 1px solid #e2e8f0;
-            display: flex;
-            gap: 1rem;
-            justify-content: flex-end;
-        }
-        .btn {
-            padding: 0.625rem 1.25rem;
-            border-radius: 6px;
-            font-size: 0.875rem;
-            font-weight: 500;
-            cursor: pointer;
-            border: none;
-            transition: all 0.15s;
-        }
-        .btn:hover { transform: translateY(-1px); }
-        .btn:active { transform: translateY(0); }
-        .btn-reject { background: #fee2e2; color: #991b1b; }
-        .btn-reject:hover { background: #fecaca; }
-        .btn-approve { background: #1a365d; color: white; }
-        .btn-approve:hover { background: #2c5282; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+/* ── Edit PO form ── */
+.cust-result { padding:8px 12px; cursor:pointer; border-bottom:1px solid #1e2030; color:#e2e8f0; }
+.cust-result:hover { background:#1e2a4a; }
+input[type="text"], input[type="number"], select, textarea {
+  background:#0f1117; color:#e0e0e0; border:1px solid #2a2d3a; border-radius:4px; padding:5px 8px; font-size:12px;
+}
+input:focus, select:focus, textarea:focus { outline:1px solid #3b82f6; }
+.suggestion-box { background:#141620; border:1px solid #2a2d3a; border-radius:6px; padding:10px 12px; margin:8px 0; }
+.suggestion-box .suggestion-title { font-size:9px; text-transform:uppercase; letter-spacing:1px; color:#64748b; margin-bottom:6px; }
+.suggestion-chip { display:flex; align-items:center; gap:8px; background:#1a1d27; border:1px solid #2a2d3a; border-radius:6px; padding:6px 10px; margin-bottom:5px; font-size:11px; }
+.suggestion-chip .suggestion-info { flex:1; }
+.suggestion-chip .suggestion-name { color:#e0e0e0; font-weight:600; }
+.suggestion-chip .suggestion-meta { color:#94a3b8; font-size:10px; }
+.suggestion-chip .suggestion-actions { display:flex; gap:5px; }
+.suggestion-chip button { padding:3px 9px; border-radius:4px; font-size:10px; font-weight:600; cursor:pointer; border:none; }
+.btn-accept { background:#16a34a; color:#fff; }
+.btn-accept:hover { background:#15803d; }
+.btn-reject-sm { background:#334155; color:#e2e8f0; }
+.suggestion-chip.accepted { border-color:#16a34a; background:#0d1f14; }
+.suggestion-chip.hidden { display:none; }
+.overwrite-guard-banner { background:#2d1b00; border:1px solid #78350f; color:#fbbf24; padding:7px 12px; border-radius:6px; font-size:11px; margin-bottom:10px; }
+.action-bar { display:flex; gap:8px; margin-top:14px; padding-top:14px; border-top:1px solid #2a2d3a; }
 
-        .alert { padding: 1rem 1.5rem; border-bottom: 1px solid #e2e8f0; }
-        .alert-red { background: #fef2f2; color: #991b1b; }
-        .alert-yellow { background: #fffbeb; color: #92400e; }
-        .alert-green { background: #f0fdf4; color: #166534; }
-        .alert h4 { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.25rem; }
-        .alert p { font-size: 0.875rem; }
+/* ── Modals ── */
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.78); z-index:1000; overflow:auto; padding:24px; align-items:flex-start; justify-content:center; }
+.modal-overlay.open { display:flex; }
+.modal-box { background:#1a1d27; border:1px solid #2a2d3a; border-radius:10px; max-width:480px; width:100%; padding:24px; margin-top:48px; }
+.modal-title { font-weight:700; font-size:15px; color:#fff; margin-bottom:12px; }
 
-        .loading { text-align: center; padding: 2rem; color: #64748b; }
-        .error { background: #fef2f2; color: #991b1b; padding: 1rem; border-radius: 6px; margin: 1rem; }
-        .success { background: #f0fdf4; color: #166534; padding: 1rem; border-radius: 6px; margin: 1rem; }
+/* ── Batch Payload Modal ── */
+#batchModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:1000; align-items:center; justify-content:center; }
+#batchModal.open { display:flex; }
+.batch-box { background:#1a1d27; border:1px solid #2a2d3a; border-radius:10px; width:min(880px,94vw); max-height:90vh; display:flex; flex-direction:column; overflow:hidden; }
+.batch-box-hdr { background:#141620; border-bottom:1px solid #2a2d3a; padding:14px 18px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
+.batch-box-hdr h2 { font-size:14px; font-weight:700; color:#fff; }
+.batch-close { background:none; border:none; color:#64748b; font-size:18px; cursor:pointer; line-height:1; }
+.batch-close:hover { color:#fff; }
+.batch-summary { padding:14px 18px; border-bottom:1px solid #2a2d3a; display:grid; grid-template-columns:repeat(3,1fr); gap:10px; flex-shrink:0; }
+.batch-stat { background:#0f1117; border-radius:6px; padding:12px; text-align:center; }
+.batch-stat .n { font-size:26px; font-weight:700; color:#4ade80; }
+.batch-stat .l { font-size:9px; text-transform:uppercase; color:#475569; margin-top:2px; letter-spacing:.5px; }
+.batch-po-chips { padding:10px 18px; border-bottom:1px solid #2a2d3a; flex-shrink:0; display:flex; flex-wrap:wrap; gap:4px; max-height:80px; overflow-y:auto; }
+.po-chip { background:#0d3320; color:#4ade80; font-size:10px; font-weight:700; padding:2px 8px; border-radius:4px; font-family:monospace; }
+.batch-preview-wrap { flex:1; overflow:hidden; display:flex; flex-direction:column; padding:12px 18px 0; min-height:0; }
+.batch-preview-wrap h3 { font-size:9px; text-transform:uppercase; letter-spacing:1px; color:#475569; margin-bottom:8px; flex-shrink:0; }
+.batch-json { flex:1; background:#0a0c14; border:1px solid #2a2d3a; border-radius:6px; padding:12px 14px; font-family:'SF Mono',monospace; font-size:10.5px; line-height:1.6; color:#a5f3fc; overflow-y:auto; white-space:pre; min-height:0; max-height:260px; }
+.batch-ftr { padding:12px 18px; border-top:1px solid #2a2d3a; display:flex; gap:8px; align-items:center; flex-shrink:0; }
+.batch-status { flex:1; font-size:11px; color:#64748b; }
+.batch-status.ok  { color:#4ade80; }
+.batch-status.err { color:#f87171; }
 
-        /* ── Batch Modal ─────────────────────────────────────────────────── */
-        #batch-modal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.55);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-        #batch-modal.open { display: flex; }
-        .modal-box {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.25);
-            width: min(860px, 92vw);
-            max-height: 88vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        .modal-header {
-            padding: 1.25rem 1.5rem;
-            border-bottom: 1px solid #e2e8f0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .modal-header h2 { font-size: 1.1rem; font-weight: 600; }
-        .modal-close {
-            background: none;
-            border: none;
-            font-size: 1.4rem;
-            cursor: pointer;
-            color: #64748b;
-            line-height: 1;
-            padding: 0 0.25rem;
-        }
-        .modal-close:hover { color: #1a365d; }
-        .modal-summary {
-            padding: 1rem 1.5rem;
-            border-bottom: 1px solid #e2e8f0;
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 1rem;
-        }
-        .summary-card {
-            background: #f8fafc;
-            border-radius: 6px;
-            padding: 0.875rem 1rem;
-            text-align: center;
-        }
-        .summary-card .num { font-size: 1.75rem; font-weight: 700; color: #1a365d; }
-        .summary-card .lbl { font-size: 0.75rem; color: #64748b; margin-top: 0.25rem; }
-        .modal-po-list {
-            padding: 0.75rem 1.5rem;
-            border-bottom: 1px solid #e2e8f0;
-            max-height: 120px;
-            overflow-y: auto;
-        }
-        .modal-po-chip {
-            display: inline-block;
-            background: #d1fae5;
-            color: #065f46;
-            font-size: 0.7rem;
-            font-weight: 600;
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
-            margin: 0.2rem 0.25rem 0.2rem 0;
-        }
-        .modal-payload-section {
-            padding: 0.75rem 1.5rem 0;
-            flex: 1;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
-        .modal-payload-section h3 { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.5rem; color: #334155; }
-        .payload-preview {
-            flex: 1;
-            background: #0f1117;
-            color: #a0aec0;
-            font-family: 'SF Mono', 'Consolas', monospace;
-            font-size: 0.72rem;
-            line-height: 1.55;
-            padding: 1rem;
-            border-radius: 6px;
-            overflow-y: auto;
-            white-space: pre;
-            max-height: 280px;
-        }
-        .modal-actions {
-            padding: 1rem 1.5rem;
-            border-top: 1px solid #e2e8f0;
-            display: flex;
-            gap: 0.75rem;
-            justify-content: flex-end;
-            align-items: center;
-        }
-        .btn-download {
-            background: #1a365d;
-            color: white;
-            padding: 0.625rem 1.25rem;
-            border-radius: 6px;
-            font-size: 0.875rem;
-            font-weight: 600;
-            border: none;
-            cursor: pointer;
-        }
-        .btn-download:hover { background: #2c5282; }
-        .btn-fire {
-            background: #10b981;
-            color: white;
-            padding: 0.625rem 1.25rem;
-            border-radius: 6px;
-            font-size: 0.875rem;
-            font-weight: 600;
-            border: none;
-            cursor: pointer;
-        }
-        .btn-fire:hover { background: #059669; }
-        .btn-fire:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-cancel {
-            background: #f1f5f9;
-            color: #475569;
-            padding: 0.625rem 1.25rem;
-            border-radius: 6px;
-            font-size: 0.875rem;
-            font-weight: 500;
-            border: none;
-            cursor: pointer;
-        }
-        .btn-cancel:hover { background: #e2e8f0; }
-        .fire-status {
-            font-size: 0.8rem;
-            color: #64748b;
-            flex: 1;
-        }
-        .fire-status.success { color: #065f46; }
-        .fire-status.error { color: #991b1b; }
-    </style>
+@media (max-width:900px) { .lanes { grid-template-columns:240px 1fr 300px; } }
+</style>
 </head>
 <body>
 
-<!-- ── Batch Approve Modal ───────────────────────────────────────────────── -->
-<div id="batch-modal">
-  <div class="modal-box">
-    <div class="modal-header">
-      <h2 id="modal-title">Batch P21 Payload — Ready</h2>
-      <button class="modal-close" onclick="closeModal()">✕</button>
-    </div>
+<div class="toast-container" id="toastContainer"></div>
 
-    <div class="modal-summary">
-      <div class="summary-card">
-        <div class="num" id="modal-included">—</div>
-        <div class="lbl">POs Approved</div>
-      </div>
-      <div class="summary-card">
-        <div class="num" id="modal-transactions">—</div>
-        <div class="lbl">Transactions in Payload</div>
-      </div>
-      <div class="summary-card">
-        <div class="num" id="modal-skipped">—</div>
-        <div class="lbl">Skipped (validation)</div>
-      </div>
-    </div>
-
-    <div class="modal-po-list" id="modal-po-chips"></div>
-
-    <div class="modal-payload-section">
-      <h3>Batch Payload Preview</h3>
-      <div class="payload-preview" id="payload-preview">Loading...</div>
-    </div>
-
-    <div class="modal-actions">
-      <span class="fire-status" id="fire-status"></span>
-      <button class="btn-cancel" onclick="closeModal()">Close</button>
-      <button class="btn-download" id="btn-dl" onclick="downloadBatchFromModal()">⬇ Download Batch JSON</button>
-      <button class="btn-fire" id="btn-fire" onclick="fireToP21()" disabled>⚡ Fire All to P21</button>
+<!-- ── Topbar ── -->
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>EnPro PO Review Portal</h1>
+    <span class="src-badge ariba">Ariba</span>
+    <span class="src-badge coupa">Coupa</span>
+    <span class="src-badge direct">Email</span>
+    <div class="divider"></div>
+    <div class="stat-mini"><div class="sv" id="sPending">—</div><div class="sl">In Queue</div></div>
+    <div class="stat-mini" style="margin-left:4px;"><div class="sv" id="sGreen">—</div><div class="sl">Green</div></div>
+    <div class="stat-mini" style="margin-left:4px;"><div class="sv" id="sTotal">—</div><div class="sl">Total</div></div>
+    <div class="divider"></div>
+    <div class="stat-mini"><div class="sv" id="sCustXW">—</div><div class="sl">Customers</div></div>
+    <div class="stat-mini" style="margin-left:4px;"><div class="sv" id="sItemXW">—</div><div class="sl">Items</div></div>
+  </div>
+  <div class="topbar-right">
+    <span title="P21 API status" id="p21StatusDot" style="display:flex;align-items:center;gap:4px;font-size:11px;color:#64748b;">
+      <span class="status-dot" style="background:#64748b;" id="p21Dot"></span> P21
+    </span>
+    <button id="bulkApproveBtn" class="btn btn-green btn-sm" disabled onclick="openBulkModal()">
+      Approve All Green (0)
+    </button>
+    <div class="divider"></div>
+    <div class="user-chip">
+      <div class="user-avatar">B</div>
+      <span>Brittany<br><span style="font-size:9px;color:#334155;">PO Review</span></span>
     </div>
   </div>
 </div>
 
-<!-- ── Main Layout ───────────────────────────────────────────────────────── -->
-<div class="header">
-    <h1>🔧 EnPro Order Management System</h1>
-    <div class="header-actions">
-        <button class="btn-download-batch" id="btn-download-batch" onclick="downloadApprovedBatch()">
-            ⬇ Download Batch JSON
-        </button>
-        <button class="btn-approve-all" id="btn-approve-all" onclick="approveAllGreen()">
-            ✓ Approve All Green (0)
-        </button>
-        <button class="refresh-btn" onclick="loadQueue()" id="refresh-btn">🔄 Refresh</button>
-        <div class="user">Brittany | PO Review</div>
+<!-- ── Three Swim Lanes ── -->
+<div class="lanes">
+
+  <!-- ═══ LEFT: Queue ═══ -->
+  <div class="lane">
+    <div class="lane-hdr">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="lane-title">Inbox</span>
+        <span class="badge-count" id="queueBadge">0</span>
+      </div>
+      <div class="filter-pills">
+        <button class="pill active" onclick="filterQ('all',event)">All</button>
+        <button class="pill" onclick="filterQ('green',event)">Green</button>
+        <button class="pill" onclick="filterQ('yellow',event)">Yellow</button>
+        <button class="pill" onclick="filterQ('red',event)">Red</button>
+      </div>
     </div>
+
+    <div class="lane-body" id="poList">
+      <div style="padding:30px;text-align:center;color:#334155;">Loading...</div>
+    </div>
+
+    <div class="lane-ftr">
+      <div class="upload-mini">
+        <div style="font-size:9px;text-transform:uppercase;color:#475569;letter-spacing:1px;margin-bottom:4px;">Add PO to Queue</div>
+        <input type="file" id="fileUpload" accept=".xml,.pdf,.csv">
+        <select id="uploadSource">
+          <option value="ariba">Ariba</option>
+          <option value="coupa">Coupa</option>
+          <option value="direct">Email / Direct</option>
+        </select>
+        <button class="btn btn-green btn-sm" onclick="uploadFile()" style="width:100%;justify-content:center;">Upload PO</button>
+        <div id="uploadResult" class="upload-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ CENTER: PO Detail ═══ -->
+  <div class="lane">
+    <div class="lane-hdr">
+      <span class="lane-title">PO Detail</span>
+      <span id="centerPOLabel" style="font-size:11px;color:#64748b;"></span>
+    </div>
+    <div class="lane-body" id="detailPanel">
+      <div class="detail-empty">
+        <div class="de-icon">📋</div>
+        <div class="de-title">Select a PO</div>
+        <div class="de-sub">Click any PO in the Inbox to review<br>customer match, address, and line items</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ RIGHT: P21 Payload ═══ -->
+  <div class="lane">
+    <div class="lane-hdr" style="flex-direction:column;align-items:flex-start;gap:6px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="lane-title">P21 Payload</span>
+          <span id="rightPanelPoNo" style="font-size:11px;color:#4ade80;font-weight:700;font-family:monospace;"></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span id="rightPanelScore" style="font-size:16px;font-weight:700;color:#4ade80;display:none;"></span>
+          <span id="rightPanelBadge"></span>
+        </div>
+      </div>
+      <div id="rightPanelErrors" style="display:none;width:100%;"></div>
+    </div>
+
+    <div class="lane-body" style="background:#0a0c14;position:relative;" id="rightPanelBody">
+      <div class="right-empty" id="rightPanelEmpty">
+        <div class="re-icon">⚡</div>
+        <div style="font-size:13px;font-weight:600;color:#334155;margin-bottom:6px;">P21 Payload</div>
+        <div style="font-size:11px;color:#1e2a3a;">Select a PO to see the<br>Transaction API JSON payload</div>
+      </div>
+      <pre id="rightPanelJson" style="display:none;"></pre>
+    </div>
+
+    <div class="lane-ftr" style="display:flex;flex-direction:column;gap:8px;">
+      <button id="rightPanelSubmit" class="btn btn-green fire-btn" disabled onclick="fireToP21()"
+              title="Approve the PO first, then submit to create a P21 Sales Order">
+        ⚡ Fire to P21
+      </button>
+      <div style="display:flex;gap:8px;">
+        <a id="rightPanelDownload" class="btn btn-gray btn-sm" style="flex:1;justify-content:center;text-decoration:none;" download>
+          ⬇ Download JSON
+        </a>
+        <button class="btn btn-gray btn-sm" onclick="copyPayloadToClipboard()" title="Copy JSON to clipboard">Copy</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /.lanes -->
+
+<!-- ── Bulk Approve List Modal ── -->
+<div class="modal-overlay" id="bulkApproveModal" onclick="if(event.target===this)closeBulkModal()">
+  <div class="modal-box">
+    <div class="modal-title">Approve All Green POs</div>
+    <div style="color:#94a3b8;font-size:13px;margin-bottom:12px;">
+      The following <span id="bulkCount" style="color:#4ade80;font-weight:700;"></span> POs will be approved and a batch P21 payload will be built:
+    </div>
+    <div id="bulkPoList" style="background:#0f1117;border:1px solid #2a2d3a;border-radius:6px;padding:12px;font-size:12px;color:#e0e0e0;max-height:200px;overflow-y:auto;margin-bottom:16px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-gray btn-sm" onclick="closeBulkModal()">Cancel</button>
+      <button class="btn btn-green btn-sm" onclick="confirmBulkApprove()">Confirm — Approve &amp; Build Batch</button>
+    </div>
+  </div>
 </div>
 
-<div class="container">
-    <aside class="sidebar">
-        <div class="queue-stats">
-            <h3 style="font-size: 0.875rem; font-weight: 600; margin-bottom: 0.75rem;">Review Queue</h3>
-            <div class="stat-row">
-                <span>🔴 Needs Review</span>
-                <span class="stat-count stat-red" id="count-red">-</span>
-            </div>
-            <div class="stat-row">
-                <span>🟡 Partial Match</span>
-                <span class="stat-count stat-yellow" id="count-yellow">-</span>
-            </div>
-            <div class="stat-row">
-                <span>🟢 Auto-Approved</span>
-                <span class="stat-count stat-green" id="count-green">-</span>
-            </div>
-        </div>
-        <div class="filter-tabs">
-            <button class="filter-tab active" onclick="setFilter('all')">All</button>
-            <button class="filter-tab" onclick="setFilter('red')">Red</button>
-            <button class="filter-tab" onclick="setFilter('yellow')">Yellow</button>
-        </div>
-        <div class="po-list" id="po-list">
-            <div class="loading">Loading...</div>
-        </div>
-    </aside>
-
-    <main class="main" id="main-panel">
-        <div class="empty-state">
-            <div class="empty-state-icon">📋</div>
-            <p>Select a PO from the queue to review</p>
-        </div>
-    </main>
+<!-- ── Batch Payload Modal ── -->
+<div id="batchModal" onclick="if(event.target===this)closeBatchModal()">
+  <div class="batch-box">
+    <div class="batch-box-hdr">
+      <h2>Batch P21 Payload — Ready to Fire</h2>
+      <button class="batch-close" onclick="closeBatchModal()">✕</button>
+    </div>
+    <div class="batch-summary">
+      <div class="batch-stat"><div class="n" id="batchApproved">—</div><div class="l">POs Approved</div></div>
+      <div class="batch-stat"><div class="n" id="batchTxns">—</div><div class="l">Transactions</div></div>
+      <div class="batch-stat"><div class="n" id="batchSkipped" style="color:#fbbf24;">—</div><div class="l">Skipped</div></div>
+    </div>
+    <div class="batch-po-chips" id="batchPoChips"></div>
+    <div class="batch-preview-wrap">
+      <h3>Batch Payload JSON</h3>
+      <div class="batch-json" id="batchJson">Loading...</div>
+    </div>
+    <div class="batch-ftr">
+      <span class="batch-status" id="batchStatus"></span>
+      <button class="btn btn-gray btn-sm" onclick="closeBatchModal()">Close</button>
+      <button class="btn btn-gray btn-sm" onclick="downloadBatchJson()">⬇ Download Batch JSON</button>
+      <button class="btn btn-green btn-sm" id="batchFireBtn" onclick="fireBatchToP21()" disabled>⚡ Fire All to P21</button>
+    </div>
+  </div>
 </div>
 
 <script>
-const API_BASE = window.location.origin + '/api/v1';
-
-let currentPOs    = [];
-let currentPO     = null;
+const API = '';
+let queue = [];
 let currentFilter = 'all';
+let selectedId = null;
 
-// Holds the batch JSON fetched during approveAllGreen for re-download
-let _batchJson     = null;
+// Holds batch state
+let _batchJsonData = null;
 let _batchFilename = 'p21_payload_batch.json';
-let _batchIds      = [];
+let _batchIntakeIds = [];
 
-// ── Queue loading ──────────────────────────────────────────────────────────
+// ── Stats ─────────────────────────────────────────────────────────────────
 
-async function loadQueue() {
-    const btn = document.getElementById('refresh-btn');
-    btn.disabled = true;
-    btn.textContent = '⏳ Loading...';
+async function loadStats() {
+  try {
+    const r = await fetch(`${API}/api/v1/stats`, { credentials:'include' });
+    const d = await r.json();
+    document.getElementById('sTotal').textContent   = d.total   || 0;
+    document.getElementById('sGreen').textContent   = d.green   || 0;
+    document.getElementById('sPending').textContent = d.pending || 0;
+    const xw = d.crosswalk || {};
+    document.getElementById('sCustXW').textContent = xw.customers ?? '—';
+    document.getElementById('sItemXW').textContent = xw.items     ?? '—';
 
+    const p21Status = d.p21_status || 'not_configured';
+    const p21Dot = document.getElementById('p21Dot');
+    if (p21Dot) {
+      const colors = { connected:'#4ade80', auth_failed:'#fbbf24', unreachable:'#f87171', not_configured:'#64748b', ready:'#4ade80' };
+      p21Dot.style.background = colors[p21Status] || '#64748b';
+    }
+  } catch(e) {
     try {
-        const res = await fetch(`${API_BASE}/review/queue`, { credentials: 'include' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        currentPOs = await res.json();
-        updateStats();
-        renderPOList();
-    } catch (err) {
-        document.getElementById('po-list').innerHTML =
-            `<div class="error">Error loading queue: ${err.message}</div>`;
-    } finally {
-        btn.disabled = false;
-        btn.textContent = '🔄 Refresh';
-    }
+      const h = await (await fetch(`${API}/health`)).json();
+      const p21Status = h.services?.p21_api || 'not_configured';
+      const colors = { connected:'#4ade80', auth_failed:'#fbbf24', unreachable:'#f87171', not_configured:'#64748b' };
+      document.getElementById('p21Dot').style.background = colors[p21Status] || '#64748b';
+    } catch(_) {}
+  }
 }
 
-function updateStats() {
-    const red    = currentPOs.filter(p => p.confidence === 'red').length;
-    const yellow = currentPOs.filter(p => p.confidence === 'yellow').length;
-    const green  = currentPOs.filter(p => p.confidence === 'green').length;
+// ── Queue ─────────────────────────────────────────────────────────────────
 
-    document.getElementById('count-red').textContent    = red;
-    document.getElementById('count-yellow').textContent = yellow;
-    document.getElementById('count-green').textContent  = green;
-
-    // Show/hide Approve All button
-    const approveBtn = document.getElementById('btn-approve-all');
-    if (green > 0) {
-        approveBtn.style.display = 'block';
-        approveBtn.textContent   = `✓ Approve All Green (${green})`;
-    } else {
-        approveBtn.style.display = 'none';
-    }
+async function loadQueue(filter) {
+  try {
+    const url = filter && filter !== 'all'
+      ? `${API}/api/v1/review/queue?confidence=${filter}`
+      : `${API}/api/v1/review/queue`;
+    queue = await (await fetch(url, { credentials:'include' })).json();
+    renderQueue();
+  } catch(e) {
+    document.getElementById('poList').innerHTML = '<div style="padding:20px;text-align:center;color:#475569;">Error loading queue</div>';
+  }
 }
 
-// ── Filter / list ──────────────────────────────────────────────────────────
+function isReadyToApprove(po) {
+  if (po.confidence !== 'green') return false;
+  const h = po.header || {};
+  if (!h.customer_id_p21) return false;
+  const lines = po.lines || [];
+  if (!lines.length) return false;
+  return lines.every(l => l.item_id_p21 && String(l.item_id_p21).trim() !== '');
+}
 
-function setFilter(filter) {
-    currentFilter = filter;
-    document.querySelectorAll('.filter-tab').forEach(tab => {
-        tab.classList.toggle('active', tab.textContent.toLowerCase().includes(filter));
+function getMissingReason(po) {
+  const h = po.header || {};
+  if (!h.customer_id_p21) return 'Missing customer mapping';
+  const lines = po.lines || [];
+  if (!lines.length) return 'No line items';
+  const unmapped = lines.filter(l => !l.item_id_p21 || !String(l.item_id_p21).trim());
+  if (unmapped.length) return `${unmapped.length} unmapped item${unmapped.length > 1 ? 's' : ''}`;
+  if (po.confidence !== 'green') return `Confidence too low (${po.confidence})`;
+  return null;
+}
+
+function renderPoRow(po) {
+  const srcTag = po.source === 'ariba' ? '<span class="src-tag ariba">Ariba</span>'
+               : po.source === 'coupa' ? '<span class="src-tag coupa">Coupa</span>'
+               : '<span class="src-tag direct">Email</span>';
+  const confColor = po.confidence === 'red' ? '#f87171' : po.confidence === 'yellow' ? '#fbbf24' : '#4ade80';
+  const score = po.customer_score != null ? ` · ${(po.customer_score * 100).toFixed(0)}%` : '';
+  return `<div class="po-item ${selectedId === po.intake_id ? 'selected' : ''}"
+       onclick="selectPO('${po.intake_id}')" tabindex="0"
+       onkeydown="if(event.key==='Enter')selectPO('${po.intake_id}')">
+    <div><span class="dot ${po.confidence}"></span><span class="po-num">${po.po_number || 'Unknown'}</span>${srcTag}</div>
+    <div class="po-meta">${po.customer_p21 || po.ship_to || '— no customer match —'}</div>
+    <div class="po-conf" style="color:${confColor};">${(po.confidence||'').toUpperCase()}${score}${po.reason ? ' · ' + po.reason.substring(0,30) : ''}</div>
+  </div>`;
+}
+
+function renderQueue() {
+  const el = document.getElementById('poList');
+  document.getElementById('queueBadge').textContent = queue.length;
+  if (!queue.length) {
+    el.innerHTML = '<div style="padding:30px;text-align:center;color:#334155;font-size:13px;">Queue is empty.<br><span style="font-size:11px;color:#1e2a3a;margin-top:6px;display:block;">Upload a PO below to get started.</span></div>';
+    updateBulkApproveBtn();
+    return;
+  }
+  const filtered = currentFilter === 'all' ? queue : queue.filter(po => po.confidence === currentFilter);
+  const needsReview    = filtered.filter(po => !isReadyToApprove(po));
+  const readyToApprove = filtered.filter(po =>  isReadyToApprove(po));
+  el.innerHTML =
+    `<div class="swim-lane-header needs-review"><span>Needs Review</span><span class="swim-count">${needsReview.length}</span></div>` +
+    (needsReview.length ? needsReview.map(renderPoRow).join('') : '<div style="padding:8px 14px;font-size:11px;color:#334155;font-style:italic;">None</div>') +
+    `<div class="swim-lane-header ready-to-approve"><span>Ready to Approve</span><span class="swim-count">${readyToApprove.length}</span></div>` +
+    (readyToApprove.length ? readyToApprove.map(renderPoRow).join('') : '<div style="padding:8px 14px;font-size:11px;color:#334155;font-style:italic;">None</div>');
+  updateBulkApproveBtn();
+}
+
+function updateBulkApproveBtn() {
+  const green = queue.filter(po => po.confidence === 'green' && po.status !== 'approved');
+  const btn = document.getElementById('bulkApproveBtn');
+  btn.textContent = `Approve All Green (${green.length})`;
+  btn.disabled = green.length === 0;
+}
+
+function filterQ(f, e) {
+  currentFilter = f;
+  document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  if (e?.target) e.target.classList.add('active');
+  loadQueue(f);
+}
+
+// ── Select PO ─────────────────────────────────────────────────────────────
+
+function selectPO(id) {
+  selectedId = id;
+  renderQueue();
+  const po = queue.find(p => p.intake_id === id);
+  if (!po) return;
+  document.getElementById('centerPOLabel').textContent = `PO ${po.po_number || id}`;
+  renderDetail(po);
+  loadRightPanel(id);
+}
+
+function renderDetail(po) {
+  const h = po.header || {};
+  const lines = po.lines || [];
+  const eligible = isReadyToApprove(po);
+  const missingReason = getMissingReason(po);
+  const approveDisabled = !eligible ? `disabled title="${missingReason}"` : '';
+  const pvErrors = (po.payload_validation || {}).errors || [];
+
+  const panel = document.getElementById('detailPanel');
+  panel.scrollTop = 0;
+  panel.innerHTML =
+    `<div class="sticky-bar">
+      <div class="po-quick-info">
+        <span class="badge-conf ${po.confidence}">${(po.confidence||'').toUpperCase()}</span>
+        ${h.customer_name_p21
+          ? `<span style="font-size:12px;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${h.customer_name_p21}</span>`
+          : `<span style="font-size:11px;color:#f87171;">customer unmapped</span>`}
+        ${po.p21_so_number ? `<span style="font-size:11px;color:#4ade80;font-weight:700;">SO #${po.p21_so_number}</span>` : ''}
+        ${missingReason && !eligible ? `<span style="font-size:10px;color:#f87171;">⚠ ${missingReason}</span>` : ''}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-blue btn-sm" onclick="editPO('${po.intake_id}')">Edit</button>
+        <button class="btn btn-green btn-sm" ${approveDisabled} onclick="${eligible ? `approvePO('${po.intake_id}')` : ''}">Approve</button>
+        <button class="btn btn-red btn-sm" onclick="rejectPO('${po.intake_id}')">Reject</button>
+      </div>
+    </div>
+    <div class="detail-body">
+      ${pvErrors.length ? `<div class="validation-errors"><div class="ve-title">Payload issues</div>${pvErrors.map(e=>`<div class="ve-item"><span class="ve-code">${e.code||''}</span>${e.message||''}</div>`).join('')}</div>` : ''}
+      <div class="meta-grid">
+        <div class="meta-box"><div class="lbl">Ship-To</div><div class="val">${h.ship2_name || po.ship_to || '—'}</div></div>
+        <div class="meta-box"><div class="lbl">P21 Customer</div><div class="val ${h.customer_id_p21 ? '' : 'warn'}">${h.customer_name_p21 || 'NOT MATCHED'} ${h.customer_id_p21 ? '<span style="font-size:10px;color:#64748b;">('+h.customer_id_p21+')</span>' : ''}</div></div>
+        <div class="meta-box"><div class="lbl">Address</div><div class="val" style="font-size:11px;">${[h.ship2_add1,h.ship2_city,h.ship2_state,h.ship2_zip].filter(Boolean).join(', ') || '—'}</div></div>
+        <div class="meta-box"><div class="lbl">Match Method</div><div class="val">${h.customer_match_method || '—'} <span style="color:#64748b;font-size:11px;">(${((h.customer_match_score||0)*100).toFixed(0)}%)</span></div></div>
+        <div class="meta-box"><div class="lbl">Source</div><div class="val">${po.source || '—'}</div></div>
+        <div class="meta-box"><div class="lbl">Received</div><div class="val" style="font-size:11px;">${po.received ? new Date(po.received).toLocaleString() : '—'}</div></div>
+      </div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#475569;margin:14px 0 6px;">Line Items (${lines.length})</div>
+      <table>
+        <thead><tr><th>#</th><th>Part #</th><th>Description</th><th>Qty</th><th>Price</th><th>P21 Item</th><th>Match</th></tr></thead>
+        <tbody>${lines.map((l,i) => `<tr>
+          <td>${l.line_no || i+1}</td>
+          <td style="font-family:monospace;font-size:11px;">${l.supplier_part_id || '—'}</td>
+          <td style="color:#94a3b8;">${(l.item_description||'').substring(0,35)}</td>
+          <td>${l.qty_ordered || 0}</td>
+          <td>$${(l.unit_price||0).toFixed?.(2)||'0.00'}</td>
+          <td style="font-family:monospace;font-size:11px;">${l.item_id_p21 || '<span style="color:#f87171;">UNMAPPED</span>'}</td>
+          <td>${matchLabel(l.crosswalk_match_score)}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+function matchLabel(score) {
+  const s = score || 0;
+  if (s >= 1.0) return '<span class="score-pill hi">EXACT</span>';
+  if (s >= 0.9) return '<span class="score-pill hi">MATCHED</span>';
+  if (s >= 0.6) return '<span class="score-pill mid">FUZZY</span>';
+  if (s > 0)   return '<span class="score-pill lo">GUESS</span>';
+  return '<span class="score-pill lo">UNMAPPED</span>';
+}
+
+// ── Right Panel — Live P21 Payload ────────────────────────────────────────
+
+let _rightPanelId = null;
+
+async function loadRightPanel(intakeId) {
+  _rightPanelId = intakeId;
+  const po = queue.find(p => p.intake_id === intakeId);
+
+  document.getElementById('rightPanelPoNo').textContent = po ? `PO ${po.po_number || intakeId}` : intakeId;
+  document.getElementById('rightPanelBadge').innerHTML = '';
+  document.getElementById('rightPanelScore').style.display = 'none';
+  document.getElementById('rightPanelErrors').style.display = 'none';
+
+  const dl = document.getElementById('rightPanelDownload');
+  dl.href = `${API}/api/v1/p21/payload/${intakeId}/download`;
+  dl.download = `p21_payload_${po?.po_number || intakeId}_${intakeId}.json`;
+
+  const submitBtn = document.getElementById('rightPanelSubmit');
+  const approved = po?.review_status === 'approved' || po?.status === 'approved';
+  submitBtn.disabled = !approved;
+  submitBtn.title = approved ? 'Submit to P21 Transaction API' : 'PO must be approved first';
+
+  document.getElementById('rightPanelEmpty').style.display = 'none';
+  const pre = document.getElementById('rightPanelJson');
+  pre.style.display = 'block';
+  pre.textContent = '// Loading P21 payload...\n';
+
+  try {
+    const resp = await fetch(`${API}/api/v1/p21/validate/${intakeId}`, {
+      method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}
     });
-    renderPOList();
-}
+    const data = await resp.json();
+    if (_rightPanelId !== intakeId) return;
 
-function renderPOList() {
-    const list = document.getElementById('po-list');
-    let filtered = currentFilter === 'all'
-        ? currentPOs
-        : currentPOs.filter(p => p.confidence === currentFilter);
+    const badge = document.getElementById('rightPanelBadge');
+    badge.className = `badge-valid ${data.valid ? 'batch_ready' : 'needs_fix'}`;
+    badge.textContent = data.valid ? '✓ Batch Ready' : '✕ Needs Fix';
 
-    if (filtered.length === 0) {
-        list.innerHTML = '<div class="empty-state">No POs in queue</div>';
-        return;
+    if (data.p21_readiness_score != null) {
+      const sc = document.getElementById('rightPanelScore');
+      sc.textContent = Math.round(data.p21_readiness_score * 100) + '%';
+      sc.style.display = 'inline';
     }
 
-    list.innerHTML = filtered.map(po => `
-        <div class="po-item ${currentPO?.intake_id === po.intake_id ? 'active' : ''}"
-             onclick="selectPO('${po.intake_id}')">
-            <span class="po-indicator ${po.confidence}"></span>
-            <span class="po-number">${po.po_number}</span>
-            <div class="po-vendor">${po.ship_to || po.customer_p21 || 'Unknown'}</div>
-            <div class="po-time">${new Date(po.received).toLocaleString()}</div>
-            <span class="po-source ${po.source}">${po.source}</span>
-        </div>
-    `).join('');
-}
-
-async function selectPO(intakeId) {
-    currentPO = currentPOs.find(p => p.intake_id === intakeId);
-    renderPOList();
-    renderPODetailFromQueue(currentPO);
-}
-
-// ── PO detail view ─────────────────────────────────────────────────────────
-
-function getConfidenceBadge(conf) {
-    const labels = {
-        green:  'GREEN — Ready for Import',
-        yellow: 'YELLOW — Review Required',
-        red:    'RED — Manual Entry Needed'
-    };
-    return `<span class="badge badge-${conf}">${labels[conf] || conf}</span>`;
-}
-
-function getSourceBadge(source) {
-    return `<span class="badge badge-${source}">${source.toUpperCase()}</span>`;
-}
-
-function renderPODetailFromQueue(po) {
-    const panel = document.getElementById('main-panel');
-    if (!po) {
-        panel.innerHTML = `<div class="empty-state">
-            <div class="empty-state-icon">📋</div>
-            <p>Select a PO from the queue to review</p>
-        </div>`;
-        return;
+    if (!data.valid && data.errors?.length) {
+      const errBox = document.getElementById('rightPanelErrors');
+      errBox.style.display = 'block';
+      errBox.innerHTML = `<div class="validation-errors" style="margin:0;">
+        <div class="ve-title">Issues preventing P21 submit</div>
+        ${data.errors.map(e=>`<div class="ve-item"><span class="ve-code">${e.code||''}</span>${e.message||''}</div>`).join('')}
+      </div>`;
     }
 
-    let alertHtml = '';
-    if (po.confidence === 'red') {
-        alertHtml = `<div class="alert alert-red">
-            <h4>⚠️ Attention Required</h4>
-            <p>This PO has unmatched items or an unknown customer. Map to P21 IDs or reject.</p>
-        </div>`;
-    } else if (po.confidence === 'yellow') {
-        alertHtml = `<div class="alert alert-yellow">
-            <h4>Review Recommended</h4>
-            <p>Some items need verification. Confirm mappings before approving.</p>
-        </div>`;
+    pre.textContent = JSON.stringify(data.payload || data, null, 2);
+  } catch(e) {
+    if (_rightPanelId !== intakeId) return;
+    pre.textContent = `// Error loading payload:\n// ${e.message}`;
+  }
+}
+
+function copyPayloadToClipboard() {
+  const pre = document.getElementById('rightPanelJson');
+  if (!pre || !pre.textContent.trim() || pre.textContent.startsWith('//')) return;
+  navigator.clipboard.writeText(pre.textContent).then(
+    () => showToast('Payload copied to clipboard', 'success'),
+    () => showToast('Copy failed — try selecting text manually', 'error')
+  );
+}
+
+async function fireToP21() {
+  if (!selectedId) return;
+  const po = queue.find(p => p.intake_id === selectedId);
+  const approved = po?.review_status === 'approved' || po?.status === 'approved';
+  if (!approved) { showToast('Approve the PO first before submitting to P21.', 'warn'); return; }
+  await submitP21Single(selectedId);
+}
+
+// ── Individual Approve / Reject ───────────────────────────────────────────
+
+async function approvePO(id) {
+  const reviewer = prompt('Reviewer name:', 'Brittany');
+  if (!reviewer) return;
+  try {
+    const resp = await fetch(`${API}/api/v1/review/po/${id}/approve`, {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json','X-Actor-Name':reviewer},
+      body:JSON.stringify({ reviewer, notes:'' })
+    });
+    const ar = await resp.json();
+    const pvOK = ar.payload_validation?.status === 'batch_ready';
+    showToast(pvOK ? 'Approved — Batch Ready ✓' : 'Approved — payload needs fix', pvOK ? 'success' : 'warn');
+    await loadQueue(currentFilter);
+    await loadStats();
+    selectPO(id);
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function rejectPO(id) {
+  const reason = prompt('Rejection reason:');
+  if (!reason) return;
+  try {
+    await fetch(`${API}/api/v1/review/po/${id}/reject`, {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ reviewer:'Brittany', reason })
+    });
+    showToast('PO rejected.', 'info');
+    selectedId = null;
+    _rightPanelId = null;
+    document.getElementById('centerPOLabel').textContent = '';
+    document.getElementById('detailPanel').innerHTML = `<div class="detail-empty"><div class="de-icon">📋</div><div class="de-title">Select a PO</div></div>`;
+    document.getElementById('rightPanelEmpty').style.display = 'flex';
+    document.getElementById('rightPanelJson').style.display = 'none';
+    document.getElementById('rightPanelPoNo').textContent = '';
+    document.getElementById('rightPanelBadge').innerHTML = '';
+    await loadQueue(currentFilter);
+    await loadStats();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function submitP21Single(id) {
+  const reviewer = prompt('Submitter name:', 'Brittany');
+  if (!reviewer) return;
+  try {
+    const resp = await fetch(`${API}/api/v1/p21/submit/${id}`, {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json','X-Actor-Name':reviewer},
+      body:JSON.stringify({ reviewer, notes:'' })
+    });
+    const data = await resp.json();
+    if (!resp.ok) { showToast('P21 submit failed: ' + (data.detail?.message || JSON.stringify(data)), 'error', 6000); return; }
+    if (data.p21_so_number) {
+      showToast(`P21 Sales Order created! SO #${data.p21_so_number}`, 'success', 6000);
     } else {
-        alertHtml = `<div class="alert alert-green">
-            <h4>✓ Ready for Import</h4>
-            <p>All items matched with high confidence. Can be batch-approved with "Approve All Green".</p>
-        </div>`;
+      showToast('P21 submit completed — no SO number returned.', 'warn', 5000);
     }
-
-    const lines = po.lines || [];
-    const linesHtml = lines.length ? `
-        <table>
-            <thead><tr>
-                <th>#</th><th>Part Number</th><th>Description</th>
-                <th>Qty</th><th>Price</th><th>P21 Item</th>
-            </tr></thead>
-            <tbody>${lines.map(l => `
-                <tr>
-                    <td>${l.line_no}</td>
-                    <td><code style="font-size:0.75rem">${l.supplier_part_id || ''}</code></td>
-                    <td>${l.item_description || '—'}</td>
-                    <td>${l.qty_ordered}</td>
-                    <td>$${parseFloat(l.unit_price||0).toFixed(2)}</td>
-                    <td>
-                        ${l.item_id_p21
-                            ? `<span class="line-status matched">✓ ${l.item_id_p21}</span>`
-                            : `<span class="line-status unmatched">Not mapped</span>`}
-                    </td>
-                </tr>`).join('')}
-            </tbody>
-        </table>` : `<p style="color:#94a3b8;font-size:0.875rem">Line items not available in queue view.</p>`;
-
-    panel.innerHTML = `
-        <div class="po-detail">
-            ${alertHtml}
-            <div class="po-header">
-                <div class="po-title">
-                    <h2>PO #${po.po_number}</h2>
-                    ${getConfidenceBadge(po.confidence)}
-                    ${getSourceBadge(po.source)}
-                </div>
-            </div>
-            <div class="po-meta">
-                <div class="meta-item">
-                    <dt>Ship-To</dt>
-                    <dd>${po.ship_to || po.header?.ship2_name || '—'}</dd>
-                </div>
-                <div class="meta-item">
-                    <dt>Customer (P21)</dt>
-                    <dd class="${po.customer_p21 ? '' : 'unknown'}">${po.customer_p21 || 'Not mapped'}</dd>
-                </div>
-                <div class="meta-item">
-                    <dt>Received</dt>
-                    <dd>${new Date(po.received).toLocaleString()}</dd>
-                </div>
-                <div class="meta-item">
-                    <dt>Intake ID</dt>
-                    <dd style="font-family:monospace;font-size:0.75rem">${po.intake_id}</dd>
-                </div>
-            </div>
-            <div class="po-lines">
-                <div class="lines-header">
-                    <h3>Line Items (${lines.length})</h3>
-                </div>
-                ${linesHtml}
-            </div>
-            <div class="actions">
-                <button class="btn btn-reject" onclick="rejectPO()">Reject</button>
-                <button class="btn btn-approve" onclick="approvePO()"
-                    ${po.confidence === 'red' ? 'disabled' : ''}>
-                    ${po.confidence === 'green' ? 'Approve & Import' : 'Approve After Review'}
-                </button>
-            </div>
-        </div>`;
-}
-
-// ── Single PO approve / reject ─────────────────────────────────────────────
-
-async function approvePO() {
-    if (!confirm(`Approve PO #${currentPO.po_number}?`)) return;
-    try {
-        const res = await fetch(`${API_BASE}/review/po/${currentPO.intake_id}/approve`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json', 'X-Actor-Name': 'Brittany' },
-            body: JSON.stringify({ reviewer: 'Brittany', notes: '' })
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        currentPOs = currentPOs.filter(p => p.intake_id !== currentPO.intake_id);
-        currentPO  = null;
-        updateStats();
-        renderPOList();
-        renderPODetailFromQueue(null);
-    } catch (err) {
-        alert(`Error approving PO: ${err.message}`);
-    }
-}
-
-async function rejectPO() {
-    const reason = prompt('Enter rejection reason:');
-    if (!reason) return;
-    try {
-        const res = await fetch(`${API_BASE}/review/po/${currentPO.intake_id}/reject`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json', 'X-Actor-Name': 'Brittany' },
-            body: JSON.stringify({ reviewer: 'Brittany', reason })
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        currentPOs = currentPOs.filter(p => p.intake_id !== currentPO.intake_id);
-        currentPO  = null;
-        updateStats();
-        renderPOList();
-        renderPODetailFromQueue(null);
-    } catch (err) {
-        alert(`Error rejecting PO: ${err.message}`);
-    }
+    await loadQueue(currentFilter);
+    if (selectedId === id) selectPO(id);
+  } catch(e) { alert('Error: ' + e.message); }
 }
 
 // ── Batch Approve All Green ────────────────────────────────────────────────
 
-async function approveAllGreen() {
-    const greenPOs = currentPOs.filter(p => p.confidence === 'green');
-    if (greenPOs.length === 0) { alert('No green POs to approve.'); return; }
+function openBulkModal() {
+  const green = queue.filter(po => po.confidence === 'green' && po.status !== 'approved');
+  if (!green.length) return;
+  document.getElementById('bulkCount').textContent = green.length;
+  document.getElementById('bulkPoList').innerHTML = green.map(po =>
+    `<div style="padding:3px 0;border-bottom:1px solid #1e2030;">
+       <span style="color:#4ade80;font-weight:700;font-family:monospace;">${po.po_number||'?'}</span>
+       <span style="color:#64748b;font-size:11px;margin-left:8px;">${po.customer_p21||''}</span>
+     </div>`
+  ).join('');
+  document.getElementById('bulkApproveModal').classList.add('open');
+}
 
-    const btn = document.getElementById('btn-approve-all');
-    btn.disabled = true;
-    btn.textContent = '⏳ Approving...';
+function closeBulkModal() {
+  document.getElementById('bulkApproveModal').classList.remove('open');
+}
 
-    // Collect intake_ids before we fire
-    const intakeIds = greenPOs.map(p => p.intake_id);
-    _batchIds = intakeIds;
+async function confirmBulkApprove() {
+  closeBulkModal();
+  const greenPOs = queue.filter(po => po.confidence === 'green' && po.status !== 'approved');
+  const intakeIds = greenPOs.map(po => po.intake_id);
+  _batchIntakeIds = intakeIds;
 
-    try {
-        // Step 1: Bulk approve all green POs
-        await fetch(`${API_BASE}/review/bulk-approve`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json', 'X-Actor-Name': 'Brittany' }
-        });
+  const btn = document.getElementById('bulkApproveBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Approving...';
 
-        btn.textContent = '⏳ Building payload...';
+  try {
+    // Step 1: Bulk approve
+    const approveResp = await fetch(`${API}/api/v1/review/bulk-approve`, {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json','X-Actor-Name':'Brittany'}
+    });
+    const approveData = await approveResp.json();
+    showToast(`${approveData.approved_count} POs approved`, 'success', 3000);
 
-        // Step 2: Build batch payload (approved_only:false — we already approved them)
-        const batchRes = await fetch(`${API_BASE}/p21/payload/batch/download`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ intake_ids: intakeIds, approved_only: false })
-        });
+    btn.textContent = '⏳ Building batch payload...';
 
-        if (!batchRes.ok) {
-            const err = await batchRes.json().catch(() => ({}));
-            throw new Error(err.detail?.message || err.detail || `HTTP ${batchRes.status}`);
-        }
+    // Step 2: Build batch payload
+    const batchResp = await fetch(`${API}/api/v1/p21/payload/batch/download`, {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ intake_ids: intakeIds, approved_only: false })
+    });
 
-        // Read the response — it's JSON with Content-Disposition: attachment
-        const batchText = await batchRes.text();
-        _batchJson = JSON.parse(batchText);
-
-        // Derive filename from Content-Disposition or fallback
-        const cd = batchRes.headers.get('Content-Disposition') || '';
-        const m  = cd.match(/filename="([^"]+)"/);
-        _batchFilename = m ? m[1] : `p21_payload_batch_${Date.now()}.json`;
-
-        // Step 3: Show modal
-        showBatchModal(intakeIds, _batchJson, greenPOs);
-
-        // Update sidebar — remove approved POs from queue display
-        currentPOs = currentPOs.filter(p => !intakeIds.includes(p.intake_id));
-        currentPO  = null;
-        updateStats();
-        renderPOList();
-        renderPODetailFromQueue(null);
-
-        // Show the persistent download button in header
-        document.getElementById('btn-download-batch').style.display = 'block';
-
-    } catch (err) {
-        alert(`Batch approve failed: ${err.message}`);
-    } finally {
-        btn.disabled = false;
-        updateStats(); // re-set text
+    if (!batchResp.ok) {
+      const err = await batchResp.json().catch(() => ({}));
+      throw new Error(err.detail?.message || err.detail || `HTTP ${batchResp.status}`);
     }
+
+    const batchText = await batchResp.text();
+    _batchJsonData = JSON.parse(batchText);
+
+    const cd = batchResp.headers.get('Content-Disposition') || '';
+    const m  = cd.match(/filename="([^"]+)"/);
+    _batchFilename = m ? m[1] : `p21_payload_batch_${Date.now()}.json`;
+
+    // Step 3: Show batch payload modal
+    showBatchModal(intakeIds, _batchJsonData, greenPOs);
+
+    // Refresh queue (approved POs will no longer show as pending)
+    await loadQueue(currentFilter);
+    await loadStats();
+
+  } catch(e) {
+    showToast(`Batch failed: ${e.message}`, 'error', 6000);
+  } finally {
+    updateBulkApproveBtn();
+  }
 }
 
 function showBatchModal(intakeIds, batchJson, greenPOs) {
-    const txns = batchJson?.Transactions?.length ?? 0;
+  const txns = batchJson?.Transactions?.length ?? 0;
 
-    document.getElementById('modal-included').textContent    = intakeIds.length;
-    document.getElementById('modal-transactions').textContent = txns;
-    document.getElementById('modal-skipped').textContent     = intakeIds.length - txns;
+  document.getElementById('batchApproved').textContent = intakeIds.length;
+  document.getElementById('batchTxns').textContent     = txns;
+  document.getElementById('batchSkipped').textContent  = intakeIds.length - txns;
 
-    // PO chips
-    const chipHtml = greenPOs.map(po =>
-        `<span class="modal-po-chip">${po.po_number}</span>`
-    ).join('');
-    document.getElementById('modal-po-chips').innerHTML = chipHtml || '<em style="color:#94a3b8;font-size:0.8rem">No PO numbers available</em>';
+  document.getElementById('batchPoChips').innerHTML = greenPOs.map(po =>
+    `<span class="po-chip">${po.po_number || po.intake_id}</span>`
+  ).join('');
 
-    // Payload preview — show full JSON (it's compact-ish for demo)
-    const preview = JSON.stringify(batchJson, null, 2);
-    document.getElementById('payload-preview').textContent = preview;
+  document.getElementById('batchJson').textContent = JSON.stringify(batchJson, null, 2);
 
-    // Enable fire button only if P21 credentials are likely configured
-    document.getElementById('btn-fire').disabled = false;
-    document.getElementById('fire-status').textContent = '';
+  document.getElementById('batchFireBtn').disabled = false;
+  document.getElementById('batchStatus').textContent = '';
+  document.getElementById('batchStatus').className = 'batch-status';
 
-    document.getElementById('batch-modal').classList.add('open');
+  document.getElementById('batchModal').classList.add('open');
 }
 
-function closeModal() {
-    document.getElementById('batch-modal').classList.remove('open');
+function closeBatchModal() {
+  document.getElementById('batchModal').classList.remove('open');
 }
 
-// ── Download helpers ───────────────────────────────────────────────────────
-
-function downloadBatchFromModal() {
-    if (!_batchJson) return;
-    triggerDownload(JSON.stringify(_batchJson, null, 2), _batchFilename);
+function downloadBatchJson() {
+  if (!_batchJsonData) return;
+  const blob = new Blob([JSON.stringify(_batchJsonData, null, 2)], { type:'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href:url, download:_batchFilename });
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
-async function downloadApprovedBatch() {
-    // Download batch for all currently-approved POs (header button)
-    try {
-        const allRes = await fetch(`${API_BASE}/review/approved`, { credentials: 'include' });
-        const approved = await allRes.json();
-        if (!approved.length) { alert('No approved POs found.'); return; }
+async function fireBatchToP21() {
+  if (!_batchIntakeIds.length) return;
+  const fireBtn  = document.getElementById('batchFireBtn');
+  const statusEl = document.getElementById('batchStatus');
+  fireBtn.disabled = true;
+  fireBtn.textContent = '⏳ Submitting...';
+  statusEl.className = 'batch-status';
+  statusEl.textContent = 'Sending to P21...';
 
-        const ids = approved.map(p => p.intake_id);
-        const batchRes = await fetch(`${API_BASE}/p21/payload/batch/download`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ intake_ids: ids, approved_only: true })
-        });
-        if (!batchRes.ok) throw new Error(`HTTP ${batchRes.status}`);
-        const text = await batchRes.text();
-        const cd   = batchRes.headers.get('Content-Disposition') || '';
-        const m    = cd.match(/filename="([^"]+)"/);
-        const fn   = m ? m[1] : `p21_payload_batch_${Date.now()}.json`;
-        triggerDownload(text, fn);
-    } catch (err) {
-        alert(`Download failed: ${err.message}`);
+  try {
+    const resp = await fetch(`${API}/api/v1/p21/submit/batch`, {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json','X-Actor-Name':'Brittany'},
+      body:JSON.stringify({ intake_ids:_batchIntakeIds, reviewer:'Brittany', notes:'Batch via portal' })
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      statusEl.className = 'batch-status err';
+      statusEl.textContent = `P21 error: ${data.detail || resp.status}`;
+      fireBtn.disabled = false;
+      fireBtn.textContent = '⚡ Fire All to P21';
+      return;
     }
+    const success = (data.results || []).filter(r => r.success).length;
+    const failed  = (data.results || []).filter(r => !r.success).length;
+    statusEl.className = `batch-status ${failed ? 'err' : 'ok'}`;
+    statusEl.textContent = failed
+      ? `${success} submitted, ${failed} failed — check P21`
+      : `✓ ${success} Sales Orders created in P21`;
+    fireBtn.textContent = '✓ Submitted';
+  } catch(e) {
+    statusEl.className = 'batch-status err';
+    statusEl.textContent = `Error: ${e.message}`;
+    fireBtn.disabled = false;
+    fireBtn.textContent = '⚡ Fire All to P21';
+  }
 }
 
-function triggerDownload(content, filename) {
-    const blob = new Blob([content], { type: 'application/json' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+// ── Upload ────────────────────────────────────────────────────────────────
+
+async function uploadFile() {
+  const fi = document.getElementById('fileUpload');
+  const src = document.getElementById('uploadSource').value;
+  if (!fi.files.length) { showToast('Select a file first', 'warn'); return; }
+  const fd = new FormData();
+  fd.append('file', fi.files[0]);
+  fd.append('source', src);
+  const resultEl = document.getElementById('uploadResult');
+  resultEl.textContent = 'Uploading...';
+  try {
+    const d = await (await fetch(`${API}/api/v1/intake/upload`, { method:'POST', credentials:'include', body:fd })).json();
+    const conf = (d.confidence||'').toUpperCase();
+    resultEl.innerHTML = `<span style="color:${d.confidence==='green'?'#4ade80':d.confidence==='yellow'?'#fbbf24':'#f87171'};font-weight:600;">${conf}</span> — PO ${d.po_no||'?'} · ${d.lines||0} lines`;
+    fi.value = '';
+    await loadQueue(currentFilter);
+    await loadStats();
+    if (d.intake_id) setTimeout(() => selectPO(d.intake_id), 200);
+  } catch(e) { resultEl.textContent = 'Error: ' + e.message; }
 }
 
-// ── Fire to P21 ────────────────────────────────────────────────────────────
+// ── Edit PO ───────────────────────────────────────────────────────────────
 
-async function fireAllToP21() {
-    if (!_batchIds.length) return;
-    const fireBtn  = document.getElementById('btn-fire');
-    const statusEl = document.getElementById('fire-status');
+let _editCustItems = [];
 
-    fireBtn.disabled     = true;
-    fireBtn.textContent  = '⏳ Submitting...';
-    statusEl.className   = 'fire-status';
-    statusEl.textContent = 'Sending to P21...';
-
-    try {
-        const res = await fetch(`${API_BASE}/p21/submit/batch`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json', 'X-Actor-Name': 'Brittany' },
-            body: JSON.stringify({ intake_ids: _batchIds, reviewer: 'Brittany', notes: 'Batch via portal' })
-        });
-        const data = await res.json();
-
-        if (!res.ok) {
-            statusEl.className   = 'fire-status error';
-            statusEl.textContent = `P21 error: ${data.detail || res.status}`;
-            fireBtn.disabled     = false;
-            fireBtn.textContent  = '⚡ Fire All to P21';
-            return;
-        }
-
-        const success = (data.results || []).filter(r => r.success).length;
-        const failed  = (data.results || []).filter(r => !r.success).length;
-        statusEl.className   = failed ? 'fire-status error' : 'fire-status success';
-        statusEl.textContent = failed
-            ? `${success} submitted, ${failed} failed — check P21`
-            : `✓ ${success} Sales Orders created in P21`;
-        fireBtn.textContent = '✓ Submitted';
-
-    } catch (err) {
-        statusEl.className   = 'fire-status error';
-        statusEl.textContent = `Error: ${err.message}`;
-        fireBtn.disabled     = false;
-        fireBtn.textContent  = '⚡ Fire All to P21';
-    }
+async function searchCustomers(q) {
+  const box = document.getElementById('custSearchResults');
+  if (!q || q.length < 2) { box.style.display='none'; return; }
+  try {
+    const data = await (await fetch(`${API}/api/v1/lookup/customers?q=${encodeURIComponent(q)}&limit=20`, {credentials:'include'})).json();
+    if (!data.length) { box.style.display='none'; return; }
+    box.innerHTML = data.map(c => `
+      <div class="cust-result" onclick="selectCustomer('${c.p21_customer_id}','${c.p21_customer_name.replace(/'/g,"\\'")}','${(c.ship2_name||'').replace(/'/g,"\\'")}','${(c.ship2_zip||'').replace(/'/g,"\\'")}')">
+        <div style="font-weight:600;font-size:12px;">${c.p21_customer_name}</div>
+        <div style="font-size:10px;color:#64748b;">ID: ${c.p21_customer_id}${c.ship2_name?' · '+c.ship2_name:''}${c.ship2_zip?' · '+c.ship2_zip:''}</div>
+      </div>`).join('');
+    box.style.display='block';
+  } catch(e) { box.style.display='none'; }
 }
 
-// Close modal on backdrop click
-document.getElementById('batch-modal').addEventListener('click', function(e) {
-    if (e.target === this) closeModal();
+function selectCustomer(id, name, ship2, zip) {
+  document.getElementById('editCustId').value = id;
+  document.getElementById('editCustName').value = name;
+  document.getElementById('editShipTo').value = ship2;
+  document.getElementById('editShipToVisible').value = ship2;
+  document.getElementById('custSearchInput').value = `${name} (${id})`;
+  document.getElementById('custSearchResults').style.display='none';
+  const disp = document.getElementById('editCustDisplay');
+  if (disp) disp.innerHTML = `<strong>${name}</strong><br><span style="color:#64748b;font-size:10px;">ID: ${id}${ship2?' · '+ship2:''}</span>`;
+  loadEditCustomerItems(id);
+}
+
+async function loadEditCustomerItems(customerId) {
+  if (!customerId) return;
+  try { _editCustItems = await (await fetch(`${API}/api/v1/lookup/customer-items/${customerId}?limit=200`, {credentials:'include'})).json(); }
+  catch(e) { _editCustItems = []; }
+  const opts = _editCustItems.map(i =>
+    `<option value="${i.p21_inv_mast_uid}" data-desc="${i.p21_item_desc||''}" data-uom="${i.unit_of_measure||'EA'}" data-price="${i.unit_price_last||''}">${i.customer_part_number} — ${(i.p21_item_desc||'').substring(0,25)} (${i.seen_count}x)</option>`
+  ).join('');
+  document.querySelectorAll('[id^="editItem_"]').forEach(sel => {
+    const cur = sel.value;
+    const first = sel.querySelector('option:first-child');
+    sel.innerHTML = (first ? first.outerHTML : '') + opts;
+    sel.value = cur;
+  });
+  const lbl = document.getElementById('editItemCount');
+  if (lbl) lbl.textContent = `${_editCustItems.length} items in history`;
+}
+
+async function editPO(id) {
+  const po = queue.find(p => p.intake_id === id);
+  if (!po) return;
+  const h = po.header || {};
+  const lines = po.lines || [];
+  const custId = h.customer_id_p21 || '';
+  let custItems = [];
+  if (custId) {
+    try { custItems = await (await fetch(`${API}/api/v1/lookup/customer-items/${custId}?limit=200`, {credentials:'include'})).json(); } catch(e) {}
+  }
+  _editCustItems = custItems;
+  const itemOptions = custItems.map(i =>
+    `<option value="${i.p21_inv_mast_uid}" data-desc="${i.p21_item_desc||''}" data-uom="${i.unit_of_measure||'EA'}" data-price="${i.unit_price_last||''}">${i.customer_part_number} — ${(i.p21_item_desc||'').substring(0,25)} (${i.seen_count}x)</option>`
+  ).join('');
+
+  const panel = document.getElementById('detailPanel');
+  panel.scrollTop = 0;
+  panel.innerHTML = `
+    <div class="sticky-bar">
+      <div class="po-quick-info">
+        <span style="font-weight:700;color:#fff;">Edit PO ${po.po_number || '?'}</span>
+        <span class="badge-conf ${po.confidence}">${(po.confidence||'').toUpperCase()}</span>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-green btn-sm" onclick="saveEditPO('${po.intake_id}',${lines.length})">Save Changes</button>
+        <button class="btn btn-gray btn-sm" onclick="selectPO('${po.intake_id}')">Cancel</button>
+      </div>
+    </div>
+    <div class="detail-body">
+      <div class="meta-grid" style="margin-bottom:14px;">
+        <div class="meta-box" style="position:relative;">
+          <div class="lbl">Search Customer</div>
+          <input id="custSearchInput" type="text" placeholder="Type name..." value="${custId ? (h.customer_name_p21||'')+'('+custId+')' : ''}" oninput="searchCustomers(this.value)" style="width:100%;margin-top:4px;">
+          <div id="custSearchResults" style="display:none;position:absolute;z-index:100;top:100%;left:0;right:0;background:#1a1d27;border:1px solid #2a2d3a;border-radius:4px;max-height:200px;overflow-y:auto;margin-top:2px;"></div>
+          <input id="editCustId" type="hidden" value="${custId}">
+          <input id="editCustName" type="hidden" value="${h.customer_name_p21||''}">
+          <input id="editShipTo" type="hidden" value="${h.ship2_name||''}">
+        </div>
+        <div class="meta-box">
+          <div class="lbl">Selected <span id="editItemCount" style="color:#475569;font-weight:400;">(${custItems.length} items)</span></div>
+          <div id="editCustDisplay" style="font-size:12px;margin-top:4px;color:${custId?'#e2e8f0':'#64748b'};">${custId?`<strong>${h.customer_name_p21||'?'}</strong><br><span style="color:#64748b;font-size:10px;">ID: ${custId}</span>`:'None — search above'}</div>
+        </div>
+        <div class="meta-box" style="grid-column:span 2;">
+          <div class="lbl">Ship-To</div>
+          <input id="editShipToVisible" value="${h.ship2_name||''}" onchange="document.getElementById('editShipTo').value=this.value;" style="width:100%;margin-top:4px;">
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>#</th><th>Item</th><th>Description</th><th>Qty</th><th>Price</th><th>UOM</th></tr></thead>
+        <tbody>${lines.map((l,i) => `<tr>
+          <td>${l.line_no || i+1}</td>
+          <td style="position:relative;">
+            <input id="itemSearchInput_${i}" type="text" placeholder="${custId?'Search items...':'Select customer first'}" value="${l.supplier_part_id?l.supplier_part_id+(l.item_id_p21?' (UID:'+l.item_id_p21+')':''):''}" oninput="searchItems(${i},this.value)" ${!custId?'disabled':''} style="width:100%;max-width:200px;">
+            <div id="itemSearchResults_${i}" style="display:none;position:absolute;z-index:100;top:100%;left:0;right:0;background:#1a1d27;border:1px solid #2a2d3a;border-radius:4px;max-height:200px;overflow-y:auto;margin-top:2px;"></div>
+            <select id="editItem_${i}" style="display:none;"><option value="${l.item_id_p21||''}">${l.supplier_part_id||''}</option>${itemOptions}</select>
+          </td>
+          <td><input id="editDesc_${i}" value="${(l.item_description||'').substring(0,40)}" style="width:100%;max-width:150px;"></td>
+          <td><input id="editQty_${i}" type="number" value="${l.qty_ordered||0}" style="width:60px;"></td>
+          <td><input id="editPrice_${i}" type="number" step="0.01" value="${(l.unit_price||0).toFixed?.(2)||'0'}" style="width:75px;"></td>
+          <td><input id="editUom_${i}" value="${l.unit_of_measure||'EA'}" style="width:50px;"></td>
+        </tr>`).join('')}</tbody>
+      </table>
+      <div style="margin-top:10px;">
+        <label style="font-size:10px;color:#64748b;text-transform:uppercase;">Notes</label>
+        <textarea id="editNotes" rows="2" style="width:100%;margin-top:4px;" placeholder="Special instructions..."></textarea>
+      </div>
+    </div>`;
+}
+
+function searchItems(lineIdx, q) {
+  const box = document.getElementById('itemSearchResults_'+lineIdx);
+  if (!q||q.length<1) { box.style.display='none'; return; }
+  const term = q.toLowerCase();
+  const matches = _editCustItems.filter(i=>
+    (i.customer_part_number||'').toLowerCase().includes(term)||
+    (i.p21_item_desc||'').toLowerCase().includes(term)||
+    String(i.p21_inv_mast_uid||'').includes(term)
+  ).slice(0,20);
+  if (!matches.length) { box.style.display='none'; return; }
+  box.innerHTML = matches.map(i=>`<div class="cust-result" onclick="selectItem(${lineIdx},'${String(i.p21_inv_mast_uid).replace(/'/g,"\\'")}','${(i.customer_part_number||'').replace(/'/g,"\\'")}','${(i.p21_item_desc||'').replace(/'/g,"\\'")}','${(i.unit_of_measure||'EA').replace(/'/g,"\\'")}','${String(i.unit_price_last||'').replace(/'/g,"\\'")}')">
+    <div style="font-weight:600;font-size:12px;">${i.customer_part_number}</div>
+    <div style="font-size:10px;color:#64748b;">${(i.p21_item_desc||'').substring(0,35)} · UID:${i.p21_inv_mast_uid}</div>
+  </div>`).join('');
+  box.style.display='block';
+}
+
+function selectItem(li,uid,pn,desc,uom,price) {
+  document.getElementById('editItem_'+li).value=uid;
+  document.getElementById('itemSearchInput_'+li).value=pn+' — '+desc.substring(0,25);
+  document.getElementById('itemSearchResults_'+li).style.display='none';
+  if(desc) document.getElementById('editDesc_'+li).value=desc;
+  if(uom)  document.getElementById('editUom_'+li).value=uom;
+  if(price) document.getElementById('editPrice_'+li).value=price;
+}
+
+async function saveEditPO(id, lineCount) {
+  const po = queue.find(p=>p.intake_id===id);
+  const lines=(po?.lines||[]).map((l,i)=>({
+    line_no:l.line_no||i+1,
+    item_id_p21:document.getElementById('editItem_'+i)?.value||'',
+    item_description:document.getElementById('editDesc_'+i)?.value||'',
+    qty_ordered:parseFloat(document.getElementById('editQty_'+i)?.value||0),
+    unit_price:parseFloat(document.getElementById('editPrice_'+i)?.value||0),
+    unit_of_measure:document.getElementById('editUom_'+i)?.value||'EA',
+  }));
+  try {
+    const r=await fetch(`${API}/api/v1/review/po/${id}/edit`,{
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        customer_id_p21:document.getElementById('editCustId')?.value||'',
+        customer_name_p21:document.getElementById('editCustName')?.value||'',
+        ship2_name:document.getElementById('editShipToVisible')?.value||document.getElementById('editShipTo')?.value||'',
+        lines, notes:document.getElementById('editNotes')?.value||'',
+      })
+    });
+    if (!r.ok) throw new Error('Save failed');
+    const result=await r.json();
+    const nc=result.new_confidence||'?';
+    showToast(`Saved — confidence now ${nc.toUpperCase()}${nc==='green'?' ✓':' (still needs review)'}`, nc==='green'?'success':'warn', 5000);
+    await loadQueue(currentFilter);
+    await loadStats();
+    selectPO(id);
+  } catch(e) { alert('Error: '+e.message); }
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+
+function showToast(msg, type='info', duration=3500) {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => { t.classList.add('hiding'); setTimeout(()=>t.remove(), 220); }, duration);
+}
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────
+
+document.addEventListener('keydown', e => {
+  const inInput = ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);
+  if (e.key==='Escape') { closeBulkModal(); closeBatchModal(); }
+  if (e.key==='Enter' && !inInput && selectedId) { e.preventDefault(); approvePO(selectedId); }
+  if (e.key==='ArrowDown' && !inInput) {
+    const idx = queue.findIndex(p=>p.intake_id===selectedId);
+    if (idx<queue.length-1) selectPO(queue[idx+1].intake_id);
+  }
+  if (e.key==='ArrowUp' && !inInput) {
+    const idx = queue.findIndex(p=>p.intake_id===selectedId);
+    if (idx>0) selectPO(queue[idx-1].intake_id);
+  }
 });
 
-// Load on start, auto-refresh every 30s
-loadQueue();
-setInterval(loadQueue, 30000);
+// ── Boot ──────────────────────────────────────────────────────────────────
+
+(async function init() {
+  await Promise.all([loadQueue('all'), loadStats()]);
+  if (queue.length) selectPO(queue[0].intake_id);
+})();
 </script>
 </body>
 </html>
