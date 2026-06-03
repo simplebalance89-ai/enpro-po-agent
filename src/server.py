@@ -1078,28 +1078,31 @@ async def _process_po_to_so(header, lines, raw_content, source, fmt) -> dict:
 
     # 6. Auto-learn from green matches
     if conf.overall == "green" and cust_match.p21_customer_id:
-        learn_from_approval(
-            p21_customer_id=cust_match.p21_customer_id,
-            p21_customer_name=cust_match.p21_customer_name,
-            source_system=source,
-            ship2_name=header.ship2_name,
-            ship2_add1=header.ship2_add1,
-            ship2_city=header.ship2_city,
-            ship2_state=header.ship2_state,
-            ship2_zip=header.ship2_zip,
-            po_no=header.po_no,
-            lines=[{
-                "supplier_part_id": cl["supplier_part_id"],
-                "inv_mast_uid": cl["inv_mast_uid"],
-                "unit_price": cl["unit_price"],
-                "unit_of_measure": cl["unit_of_measure"],
-                "item_description": cl["item_description"],
-                "line_no": cl["line_no"],
-            } for cl in cism_lines if cl.get("inv_mast_uid")],
-            crosswalk_dir=settings.crosswalk_dir,
-        )
-        # Invalidate cached engine so newly learned rows are visible next call
-        _customer_engine = None
+        try:
+            learn_from_approval(
+                p21_customer_id=cust_match.p21_customer_id,
+                p21_customer_name=cust_match.p21_customer_name,
+                source_system=source,
+                ship2_name=header.ship2_name,
+                ship2_add1=header.ship2_add1,
+                ship2_city=header.ship2_city,
+                ship2_state=header.ship2_state,
+                ship2_zip=header.ship2_zip,
+                po_no=header.po_no,
+                lines=[{
+                    "supplier_part_id": cl["supplier_part_id"],
+                    "inv_mast_uid": cl["inv_mast_uid"],
+                    "unit_price": cl["unit_price"],
+                    "unit_of_measure": cl["unit_of_measure"],
+                    "item_description": cl["item_description"],
+                    "line_no": cl["line_no"],
+                } for cl in cism_lines if cl.get("inv_mast_uid")],
+                crosswalk_dir=settings.crosswalk_dir,
+            )
+            # Invalidate cached engine so newly learned rows are visible next call
+            _customer_engine = None
+        except Exception as _learn_exc:
+            logger.warning(f"learn_from_approval skipped (non-fatal): {_learn_exc}")
 
     # Build payload for staging
     payload = POPayload(
