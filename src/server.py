@@ -3142,8 +3142,9 @@ async def stats():
 
     # Crosswalk counts from CSV files
     engine = _get_customer_engine()
-    cust_count = len(engine.customer_xw)
-    item_count = sum(len(v) for v in engine.customer_items.values())
+    cust_count      = len(engine.customer_xw)
+    item_xw_count   = sum(len(v) for v in engine.customer_items.values())
+    item_master_count = len(engine.item_master)
 
     return {
         "total": s["total"],
@@ -3154,8 +3155,9 @@ async def stats():
         "rejected": s["rejected"],
         "pending": s["pending"],
         "crosswalk": {
-            "customers": cust_count,
-            "items": item_count,
+            "customers":    cust_count,
+            "items":        item_xw_count,
+            "item_master":  item_master_count,
         }
     }
 

@@ -415,8 +415,8 @@ async function loadStats() {
     document.getElementById('sGreen').textContent   = d.green   || 0;
     document.getElementById('sPending').textContent = d.pending || 0;
     const xw = d.crosswalk || {};
-    document.getElementById('sCustXW').textContent = xw.customers ?? '—';
-    document.getElementById('sItemXW').textContent = xw.items     ?? '—';
+    document.getElementById('sCustXW').textContent = xw.customers    ?? '—';
+    document.getElementById('sItemXW').textContent = xw.item_master ?? xw.items ?? '—';
 
     const p21Status = d.p21_status || 'not_configured';
     const p21Dot = document.getElementById('p21Dot');
