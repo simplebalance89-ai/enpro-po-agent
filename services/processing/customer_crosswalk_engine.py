@@ -112,11 +112,27 @@ class CustomerCrosswalkEngine:
         logger.info(f"  item_master_index: {len(self.item_master)} items")
 
         # Customers P21
+        _phone_null = 0
+        _email_null = 0
         for row in _read_csv("customers_p21.csv"):
             cid = row.get("customer_id", "")
-            if cid:
-                self.customers_p21[cid] = row
-        logger.info(f"  customers_p21: {len(self.customers_p21)} customers")
+            if not cid:
+                continue
+            # Sanitize phone: dot-placeholder or blank → None
+            phone = (row.get("central_phone_number") or "").strip()
+            if not phone or phone == ".":
+                row["central_phone_number"] = None
+                _phone_null += 1
+            # Sanitize email: no '@', or starts with WWW/HTTP → None
+            email = (row.get("email_address") or "").strip()
+            if not email or "@" not in email or email.upper().startswith(("WWW", "HTTP")):
+                row["email_address"] = None
+                _email_null += 1
+            self.customers_p21[cid] = row
+        logger.info(
+            f"  customers_p21: {len(self.customers_p21)} customers "
+            f"(sanitized {_phone_null} phones, {_email_null} emails)"
+        )
 
         # Customer defaults (contact_id, address_id, terms, carrier)
         for row in _read_csv("customer_defaults.csv"):
