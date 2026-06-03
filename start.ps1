@@ -45,14 +45,14 @@ try {
 
 # 4. Start server
 Write-Host "" 
-Write-Host "Starting server on http://localhost:8001" -ForegroundColor Cyan
-Write-Host "- Health:     http://localhost:8001/health" -ForegroundColor DarkGray
-Write-Host "- Portal:     http://localhost:8001/" -ForegroundColor DarkGray
-Write-Host "- Test Drive: http://localhost:8001/test-drive" -ForegroundColor DarkGray
-Write-Host "- API Docs:   http://localhost:8001/docs" -ForegroundColor DarkGray
+Write-Host "Starting server on http://localhost:8000" -ForegroundColor Cyan
+Write-Host "- Health:     http://localhost:8000/health" -ForegroundColor DarkGray
+Write-Host "- Portal:     http://localhost:8000/" -ForegroundColor DarkGray
+Write-Host "- Test Drive: http://localhost:8000/test-drive" -ForegroundColor DarkGray
+Write-Host "- API Docs:   http://localhost:8000/docs" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "Press Ctrl+C to stop" -ForegroundColor Yellow
 Write-Host "========================================" -ForegroundColor Cyan
 
 $env:PYTHONPATH = "$PWD\src;$env:PYTHONPATH"
-uvicorn src.server:app --reload --host 0.0.0.0 --port 8001
+uvicorn src.server:app --reload --host 0.0.0.0 --port 8000
