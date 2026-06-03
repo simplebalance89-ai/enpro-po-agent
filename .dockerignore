@@ -16,7 +16,14 @@ docker-compose.yml
 .venv
 *.pyc
 po_store
-data
+data/cism_output
+data/cism_so_output
+data/cism_batch
+data/p21_data
+data/quote_data
+data/po_store
+data/invoices
+data/outbound_store
 archive
 .github
 azure
