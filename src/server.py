@@ -21,11 +21,13 @@ Routes:
 """
 
 import asyncio
+import base64
 import csv
 import hashlib
 import json
 import logging
 import os
+import secrets
 import shutil
 import sqlite3
 import time
@@ -146,6 +148,46 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_BASIC_AUTH_USERNAME = "enpro"
+_BASIC_AUTH_PASSWORD = "EnPro2026!"
+_AUTH_EXEMPT_PATHS = {"/health", "/api/v1/health"}
+
+
+@app.middleware("http")
+async def basic_auth_middleware(request: Request, call_next):
+    if request.url.path in _AUTH_EXEMPT_PATHS:
+        return await call_next(request)
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Basic "):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Authentication required"},
+            headers={"WWW-Authenticate": 'Basic realm="EnPro PO Agent"'},
+        )
+
+    try:
+        decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+        username, _, password = decoded.partition(":")
+    except Exception:
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Invalid Authorization header"},
+            headers={"WWW-Authenticate": 'Basic realm="EnPro PO Agent"'},
+        )
+
+    creds_valid = secrets.compare_digest(username, _BASIC_AUTH_USERNAME) and \
+                  secrets.compare_digest(password, _BASIC_AUTH_PASSWORD)
+    if not creds_valid:
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Invalid credentials"},
+            headers={"WWW-Authenticate": 'Basic realm="EnPro PO Agent"'},
+        )
+
+    return await call_next(request)
+
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
