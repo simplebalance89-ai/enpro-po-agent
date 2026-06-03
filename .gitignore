@@ -9,3 +9,10 @@ po_store/
 .DS_Store
 artifacts/
 scripts/build_batch_payloads.py
+# P21 data exports — contain live customer/PO data, never commit
+data/crosswalks/
+data/cism_output/
+data/cism_so_output/
+data/cism_batch/
+data/p21_data/
+data/quote_data/
