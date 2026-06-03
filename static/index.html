@@ -210,18 +210,18 @@ details.help-section[open] > summary .arrow { transform:rotate(90deg); }
 </div>
 <div class="tabs" id="mainTabs">
   <div class="tab-group">
-    <span class="tab-group-label">📥 Intake</span>
-    <button class="tab active" onclick="showTab('queue')">Review Queue <span class="badge" id="queueBadge">0</span></button>
-    <button class="tab" onclick="showTab('processed')">Processed <span class="badge" id="procBadge">0</span></button>
+    <span class="tab-group-label">📤 P21 Output</span>
+    <button class="tab active" onclick="showTab('payloads')">P21 Payloads <span class="badge" id="payloadsBadge">0</span></button>
   </div>
   <div class="tab-group">
-    <span class="tab-group-label">📤 Export / Batch</span>
-    <button class="tab" onclick="showTab('payloads')">P21 Payloads <span class="badge" id="payloadsBadge">0</span></button>
-    <button class="tab" onclick="showTab('batch')">CISM Batch <span class="badge" id="batchBadge">0</span></button>
-    <button class="tab admin-only" onclick="showTab('outbound')">Outbound Sync <span class="badge" id="outboundBadge">0</span></button>
+    <span class="tab-group-label">📥 Intake</span>
+    <button class="tab" onclick="showTab('queue')">Review Queue <span class="badge" id="queueBadge">0</span></button>
+    <button class="tab" onclick="showTab('processed')">Processed <span class="badge" id="procBadge">0</span></button>
   </div>
   <div class="tab-group admin-only">
     <span class="tab-group-label">⚙️ Admin</span>
+    <button class="tab admin-only" onclick="showTab('outbound')">Outbound Sync <span class="badge" id="outboundBadge">0</span></button>
+    <button class="tab admin-only" onclick="showTab('batch')">CISM Batch <span class="badge" id="batchBadge">0</span></button>
     <button class="tab admin-only" onclick="showTab('crosswalk')">Crosswalk</button>
     <button class="tab admin-only" onclick="showTab('cism')">Schema</button>
     <button class="tab admin-only" onclick="showTab('pipeline')">Pipeline</button>
@@ -236,7 +236,7 @@ details.help-section[open] > summary .arrow { transform:rotate(90deg); }
 <div class="content">
 
 <!-- REVIEW QUEUE -->
-<div class="tab-panel active" id="panel-queue">
+<div class="tab-panel" id="panel-queue">
   <div class="queue-layout">
     <div class="queue-sidebar">
       <div class="queue-header">
@@ -447,7 +447,7 @@ details.help-section[open] > summary .arrow { transform:rotate(90deg); }
 </div>
 
 <!-- P21 PAYLOADS -->
-<div class="tab-panel" id="panel-payloads">
+<div class="tab-panel active" id="panel-payloads">
   <div class="xw-section">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px;">
       <h3 style="margin:0;">P21 Transaction API Payloads</h3>
