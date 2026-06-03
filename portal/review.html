@@ -26,8 +26,23 @@ a { color:#60a5fa; text-decoration:none; }
 .user-chip { font-size:11px; color:#94a3b8; display:flex; align-items:center; gap:5px; }
 .user-avatar { width:22px; height:22px; border-radius:50%; background:#1e3a5f; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:#7dd3fc; }
 
+/* ── Tab bar ── */
+.tab-bar { background:#141620; border-bottom:1px solid #2a2d3a; display:flex; align-items:center; padding:0 20px; flex-shrink:0; height:36px; gap:2px; }
+.nav-tab { padding:0 16px; height:100%; display:flex; align-items:center; font-size:12px; font-weight:600; cursor:pointer; border:none; background:transparent; color:#64748b; border-bottom:2px solid transparent; transition:all .15s; }
+.nav-tab:hover:not(:disabled) { color:#94a3b8; }
+.nav-tab.active { color:#e0e0e0; border-bottom-color:#3b82f6; }
+.nav-tab:disabled { opacity:.45; cursor:not-allowed; }
+/* ── Tab content ── */
+.tab-content { display:none; flex:1; overflow:hidden; flex-direction:column; }
+.tab-content.active { display:flex; }
+/* ── Invoice placeholder ── */
+.invoice-placeholder { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#334155; text-align:center; padding:60px 40px; }
+.invoice-placeholder .ip-icon { font-size:52px; margin-bottom:20px; opacity:.5; }
+.invoice-placeholder h2 { font-size:18px; font-weight:700; color:#475569; margin-bottom:12px; }
+.invoice-placeholder p { font-size:13px; color:#334155; line-height:1.7; max-width:420px; }
+.invoice-placeholder .ip-badge { display:inline-block; margin-top:20px; padding:6px 16px; border-radius:20px; background:#1a1d27; border:1px solid #2a2d3a; font-size:11px; color:#64748b; font-weight:600; }
 /* ── Three-lane layout ── */
-.lanes { display:grid; grid-template-columns:290px 1fr 400px; flex:1; overflow:hidden; }
+.lanes { display:grid; grid-template-columns:290px 1fr 380px; flex:1; overflow:hidden; }
 .lane { display:flex; flex-direction:column; border-right:1px solid #2a2d3a; overflow:hidden; }
 .lane:last-child { border-right:none; }
 .lane-hdr { background:#141620; border-bottom:1px solid #2a2d3a; padding:10px 14px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
@@ -223,6 +238,15 @@ input:focus, select:focus, textarea:focus { outline:1px solid #3b82f6; }
   </div>
 </div>
 
+<!-- ── Tab Navigation ── -->
+<div class="tab-bar">
+  <button class="nav-tab active" id="tab-review"   onclick="showTab('review')">📋 PO Review</button>
+  <button class="nav-tab"        id="tab-invoices" onclick="showTab('invoices')">🧾 Invoices</button>
+</div>
+
+<!-- ── PO Review Tab ── -->
+<div class="tab-content active" id="content-review">
+
 <!-- ── Three Swim Lanes ── -->
 <div class="lanes">
 
@@ -315,6 +339,19 @@ input:focus, select:focus, textarea:focus { outline:1px solid #3b82f6; }
   </div>
 
 </div><!-- /.lanes -->
+
+</div><!-- /#content-review -->
+
+<!-- ── Invoices Tab ── -->
+<div class="tab-content" id="content-invoices">
+  <div class="invoice-placeholder">
+    <div class="ip-icon">🧾</div>
+    <h2>Invoice Module — Coming Soon</h2>
+    <p>This module will automatically sync P21 invoices back to Coupa and Ariba after order fulfillment. Once enabled, approved Sales Orders will trigger invoice creation and push remittance data back to the procurement system.</p>
+    <p style="margin-top:12px;font-size:12px;color:#475569;">Contact your administrator to enable this feature.</p>
+    <span class="ip-badge">ENABLE_INVOICE_SYNC=true in environment config</span>
+  </div>
+</div>
 
 <!-- ── Bulk Approve List Modal ── -->
 <div class="modal-overlay" id="bulkApproveModal" onclick="if(event.target===this)closeBulkModal()">
@@ -1061,6 +1098,15 @@ document.addEventListener('keydown', e => {
     if (idx>0) selectPO(queue[idx-1].intake_id);
   }
 });
+
+// ── Tab switching ─────────────────────────────────────────────────────────
+
+function showTab(name) {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.getElementById('content-' + name).classList.add('active');
+}
 
 // ── Boot ──────────────────────────────────────────────────────────────────
 
