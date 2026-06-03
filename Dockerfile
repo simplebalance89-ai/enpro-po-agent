@@ -31,8 +31,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p /app/data/cism_output /app/data/cism_so_output /app/data/crosswalks \
-    /app/data/po_store /app/data/p21_data /app/data/quote_data /app/logs /app/test_data \
+RUN mkdir -p /app/data/po_store /app/data/crosswalks /app/data/cism_batch \
+    /app/data/cism_output /app/data/cism_so_output /app/data/p21_data \
+    /app/data/quote_data /app/logs /app/test_data \
     && chown -R enpro:enpro /app
 
 USER enpro
