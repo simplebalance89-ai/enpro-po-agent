@@ -1198,6 +1198,9 @@ async def _process_po_to_so(header, lines, raw_content, source, fmt) -> dict:
             "product_group": cl.get("product_group", ""),
             "crosswalk_match_score": item_scores[i] if i < len(item_scores) else 0,
         } for i, cl in enumerate(cism_lines)],
+        "format": fmt,
+        "raw_content": (raw_content[:600] if isinstance(raw_content, str) else ""),
+        "notes": "",
     }
     local_store.save_po(intake_id, result_data)
 
@@ -1255,7 +1258,20 @@ async def review_queue(confidence: Optional[str] = None):
         "item_scores": po.get("item_scores", []),
         "header": po.get("header", {}),
         "lines": po.get("lines", []),
+        "format": po.get("format", ""),
+        "raw_content": po.get("raw_content", ""),
+        "notes": po.get("notes", ""),
+        "payload_validation": po.get("payload_validation", {}),
     } for po in all_pos]
+
+
+@app.post("/api/v1/review/po/{intake_id}/note")
+async def save_po_note(intake_id: str, request: Request):
+    """Save reviewer notes for a PO. Called on textarea blur from portal."""
+    body = await request.json()
+    notes = str(body.get("notes", ""))[:2000]
+    local_store.update_po(intake_id, {"notes": notes})
+    return {"status": "saved", "intake_id": intake_id}
 
 
 @app.get("/api/v1/review/all")
