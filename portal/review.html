@@ -136,10 +136,15 @@ a { color:#3b82f6; text-decoration:none; }
 .topbar-left  { display:flex; align-items:center; gap:12px; }
 .topbar-right { display:flex; align-items:center; gap:10px; flex-shrink:0; }
 .topbar h1 { font-size:16px; font-weight:700; color:#fff; white-space:nowrap; }
-.src-badge { padding:2px 8px; border-radius:3px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+.src-badge { padding:2px 8px; border-radius:3px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; cursor:pointer; opacity:.6; transition:opacity .15s, box-shadow .15s; user-select:none; }
+.src-badge:hover { opacity:.85; }
 .src-badge.ariba  { background:#1e3a5f; color:#7dd3fc; border:1px solid #1e40af; }
 .src-badge.coupa  { background:#3f1e4a; color:#e9d5ff; border:1px solid #7c3aed; }
 .src-badge.direct { background:rgba(255,255,255,.1); color:#86efac; border:1px solid rgba(134,239,172,.3); }
+.src-badge.active { opacity:1; }
+.src-badge.ariba.active  { background:#1d4ed8; color:#bfdbfe; border-color:#3b82f6; box-shadow:0 0 0 2px #3b82f6; }
+.src-badge.coupa.active  { background:#6d28d9; color:#ede9fe; border-color:#a78bfa; box-shadow:0 0 0 2px #a78bfa; }
+.src-badge.direct.active { background:rgba(74,222,128,.2); color:#4ade80; border-color:#4ade80; box-shadow:0 0 0 2px #4ade80; }
 .stat-mini { text-align:center; }
 .stat-mini .sv { font-size:20px; font-weight:700; color:#fff; line-height:1; }
 .stat-mini .sl { font-size:9px; text-transform:uppercase; color:rgba(255,255,255,.5); letter-spacing:.5px; margin-top:1px; }
@@ -386,9 +391,9 @@ input:focus, select:focus, textarea:focus { outline:1px solid #3b82f6; }
 <div class="topbar">
   <div class="topbar-left">
     <h1>EnPro PO Review Portal</h1>
-    <span class="src-badge ariba">Ariba</span>
-    <span class="src-badge coupa">Coupa</span>
-    <span class="src-badge direct">Email</span>
+    <span class="src-badge ariba"  id="srcFilter-ariba"  onclick="toggleSource('ariba',this)"  title="Filter: Ariba only">Ariba</span>
+    <span class="src-badge coupa"  id="srcFilter-coupa"  onclick="toggleSource('coupa',this)"  title="Filter: Coupa only">Coupa</span>
+    <span class="src-badge direct" id="srcFilter-direct" onclick="toggleSource('direct',this)" title="Filter: Email only">Email</span>
     <div class="divider"></div>
     <div class="stat-mini"><div class="sv" id="sPending">—</div><div class="sl">In Queue</div></div>
     <div class="stat-mini" style="margin-left:4px;"><div class="sv" id="sGreen">—</div><div class="sl">Green</div></div>
@@ -730,6 +735,7 @@ function showTab(name) {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let queue = [], currentFilter = 'all', selectedId = null;
+const activeSources = new Set(); // empty = show all sources
 let _batchJsonData = null, _batchFilename = 'p21_payload_batch.json', _batchIntakeIds = [];
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
@@ -821,6 +827,17 @@ function renderPoRow(po) {
   </div>`;
 }
 
+function toggleSource(src, el) {
+  if (activeSources.has(src)) {
+    activeSources.delete(src);
+    el.classList.remove('active');
+  } else {
+    activeSources.add(src);
+    el.classList.add('active');
+  }
+  renderQueue();
+}
+
 function renderQueue() {
   const el = document.getElementById('poList');
   document.getElementById('queueBadge').textContent = queue.length;
@@ -829,7 +846,20 @@ function renderQueue() {
     updateBulkApproveBtn();
     return;
   }
-  const filtered     = currentFilter === 'all' ? queue : queue.filter(po => po.confidence === currentFilter);
+
+  // Confidence filter
+  let filtered = currentFilter === 'all' ? queue : queue.filter(po => po.confidence === currentFilter);
+
+  // Source filter — 'direct' badge covers both 'direct' and 'email' sources
+  if (activeSources.size > 0) {
+    filtered = filtered.filter(po => {
+      const src = (po.source || '').toLowerCase();
+      if (activeSources.has(src)) return true;
+      if (activeSources.has('direct') && (src === 'email' || src === 'direct')) return true;
+      return false;
+    });
+  }
+
   const needsReview  = filtered.filter(po => !isReadyToApprove(po));
   const readyApprove = filtered.filter(po =>  isReadyToApprove(po));
   el.innerHTML =
