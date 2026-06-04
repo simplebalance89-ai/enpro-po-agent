@@ -778,8 +778,34 @@ async def intake_upload(
             header, lines, raw = po_parser.parse_pdf(
                 tmp_path, settings.doc_intel_endpoint, settings.doc_intel_key
             )
-        finally:
+        except Exception as pdf_err:
             os.unlink(tmp_path)
+            # Fallback: Document Intelligence failed — create a manual-review RED PO
+            # so the file still appears in the queue rather than returning 500.
+            logger.warning(
+                f"PDF parse failed for '{filename}' ({type(pdf_err).__name__}: {pdf_err}). "
+                "Creating manual-review placeholder."
+            )
+            from models import POHeader, POLineItem
+            po_no_fallback = os.path.splitext(filename)[0][:50]
+            header = POHeader(
+                po_no=po_no_fallback,
+                ship2_name="PDF Upload — Requires Manual Review",
+                order_date=datetime.utcnow().strftime("%Y-%m-%d"),
+            )
+            lines = []
+            raw = f"PDF parse failed: {pdf_err}\nFilename: {filename}"
+            payload = await _process_po_to_so(header, lines, raw, source, "pdf")
+            payload["_pdf_parse_error"] = str(pdf_err)
+            payload["_pdf_parse_note"] = (
+                "Document Intelligence could not parse this PDF. "
+                "The PO has been added to the queue as RED for manual review. "
+                "Use Edit PO to enter details manually."
+            )
+            return payload
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
         fmt = "pdf"
     else:
         raise HTTPException(400, "Unsupported file type. Upload .xml, .csv, or .pdf")
@@ -2165,11 +2191,38 @@ async def edit_po(intake_id: str, req: EditPORequest, request: Request, _auth=De
         cust_match["method"] = "manual_edit"
         updates["customer_match"] = cust_match
 
-    if req.ship2_name is not None: header["ship2_name"] = req.ship2_name
-    if req.ship2_add1 is not None: header["ship2_add1"] = req.ship2_add1
-    if req.ship2_city is not None: header["ship2_city"] = req.ship2_city
-    if req.ship2_state is not None: header["ship2_state"] = req.ship2_state
-    if req.ship2_zip is not None: header["ship2_zip"] = req.ship2_zip
+    address_changed = False
+    if req.ship2_name  is not None and req.ship2_name  != header.get("ship2_name"):  header["ship2_name"]  = req.ship2_name;  address_changed = True
+    if req.ship2_add1  is not None and req.ship2_add1  != header.get("ship2_add1"):  header["ship2_add1"]  = req.ship2_add1;  address_changed = True
+    if req.ship2_city  is not None and req.ship2_city  != header.get("ship2_city"):  header["ship2_city"]  = req.ship2_city;  address_changed = True
+    if req.ship2_state is not None and req.ship2_state != header.get("ship2_state"): header["ship2_state"] = req.ship2_state; address_changed = True
+    if req.ship2_zip   is not None and req.ship2_zip   != header.get("ship2_zip"):   header["ship2_zip"]   = req.ship2_zip;   address_changed = True
+
+    # Re-run crosswalk matching if ship-to address changed and no manual customer override
+    if address_changed and not req.customer_id_p21:
+        try:
+            engine = _get_customer_engine()
+            new_match = engine.match_customer(
+                ship2_name=header.get("ship2_name", ""),
+                ship2_add1=header.get("ship2_add1", ""),
+                ship2_city=header.get("ship2_city", ""),
+                ship2_state=header.get("ship2_state", ""),
+                ship2_zip=header.get("ship2_zip", ""),
+            )
+            if new_match.p21_customer_id:
+                header["customer_id_p21"]      = new_match.p21_customer_id
+                header["customer_name_p21"]    = new_match.p21_customer_name
+                header["customer_match_score"] = new_match.match_score
+                header["customer_match_method"]= new_match.match_method
+                cust_match["p21_id"]  = new_match.p21_customer_id
+                cust_match["name"]    = new_match.p21_customer_name
+                cust_match["score"]   = new_match.match_score
+                cust_match["method"]  = new_match.match_method
+                cust_match["candidates"] = new_match.candidates
+                updates["customer_match"] = cust_match
+        except Exception as _e:
+            logger.warning(f"Re-run crosswalk match after address edit failed (non-fatal): {_e}")
+
     updates["header"] = header
 
     if req.lines is not None:
@@ -2743,6 +2796,37 @@ async def lookup_customer_items(customer_id: str, q: str = "", limit: int = 50):
         "unit_price_last": i.get("unit_price_last"),
         "seen_count": i.get("seen_count"),
     } for i in items[:limit]]
+
+
+@app.get("/api/v1/lookup/items")
+async def lookup_items(q: str = "", limit: int = 25):
+    """
+    Search the item_master_index (V26 crosswalk) by part number or description.
+    Used for the Edit PO part number searchable dropdown.
+    Returns up to `limit` matches ordered: exact part prefix → desc contains → normalized.
+    """
+    engine = _get_customer_engine()
+    if not q or len(q) < 2:
+        return []
+    q_lower = q.lower().strip()
+    exact, prefix, desc_hits = [], [], []
+    for uid, item in engine.item_master.items():
+        part = (uid or "").lower()
+        desc = (item.get("p21_item_desc") or "").lower()
+        desc_norm = (item.get("p21_item_desc_normalized") or "").lower()
+        if part == q_lower:
+            exact.append(item)
+        elif part.startswith(q_lower):
+            prefix.append(item)
+        elif q_lower in part or q_lower in desc or q_lower in desc_norm:
+            desc_hits.append(item)
+    combined = (exact + prefix + desc_hits)[:limit]
+    return [{
+        "p21_inv_mast_uid":    r.get("p21_inv_mast_uid"),
+        "p21_item_desc":       r.get("p21_item_desc"),
+        "default_selling_unit":r.get("default_selling_unit") or "EA",
+        "product_group":       r.get("product_group"),
+    } for r in combined]
 
 
 @app.get("/api/v1/lookup/customers")

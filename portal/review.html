@@ -1187,18 +1187,62 @@ async function editPO(id) {
   <div class="detail-body"><div class="meta-grid" style="margin-bottom:14px;">
     <div class="meta-box" style="position:relative;"><div class="lbl">Search Customer</div><input id="custSearchInput" type="text" placeholder="Type name..." value="${custId?(h.customer_name_p21||'')+'('+custId+')':''}" oninput="searchCustomers(this.value)" style="width:100%;margin-top:4px;"><div id="custSearchResults" style="display:none;position:absolute;z-index:100;top:100%;left:0;right:0;background:var(--panel-bg);border:1px solid var(--border-color);border-radius:4px;max-height:200px;overflow-y:auto;margin-top:2px;"></div><input id="editCustId" type="hidden" value="${custId}"><input id="editCustName" type="hidden" value="${h.customer_name_p21||''}"><input id="editShipTo" type="hidden" value="${h.ship2_name||''}"></div>
     <div class="meta-box"><div class="lbl">Selected <span id="editItemCount" style="color:var(--text-secondary);font-weight:400;">(${custItems.length} items)</span></div><div id="editCustDisplay" style="font-size:12px;margin-top:4px;">${custId?`<strong>${h.customer_name_p21||'?'}</strong><br><span style="color:var(--text-secondary);font-size:10px;">ID: ${custId}</span>`:'None — search above'}</div></div>
-    <div class="meta-box" style="grid-column:span 2;"><div class="lbl">Ship-To</div><input id="editShipToVisible" value="${h.ship2_name||''}" onchange="document.getElementById('editShipTo').value=this.value;" style="width:100%;margin-top:4px;"></div>
+    <div class="meta-box" style="grid-column:span 2;">
+      <div class="lbl">Ship-To Address</div>
+      <input id="editShipToVisible" value="${(h.ship2_name||'').replace(/"/g,'&quot;')}" style="width:100%;margin-top:4px;" placeholder="Company / Location name">
+      <input id="editShipAdd1" value="${(h.ship2_add1||'').replace(/"/g,'&quot;')}" style="width:100%;margin-top:5px;" placeholder="Address Line 1">
+      <div style="display:flex;gap:5px;margin-top:5px;">
+        <input id="editShipCity"  value="${(h.ship2_city||'').replace(/"/g,'&quot;')}"  style="flex:2;" placeholder="City">
+        <input id="editShipState" value="${(h.ship2_state||'').replace(/"/g,'&quot;')}" style="width:44px;" placeholder="ST" maxlength="2">
+        <input id="editShipZip"   value="${(h.ship2_zip||'').replace(/"/g,'&quot;')}"   style="width:82px;" placeholder="ZIP">
+      </div>
+      <input id="editShipTo" type="hidden" value="${(h.ship2_name||'').replace(/"/g,'&quot;')}">
+    </div>
   </div>
   <table><thead><tr><th>#</th><th>Item</th><th>Description</th><th>Qty</th><th>Price</th><th>UOM</th></tr></thead>
   <tbody>${lines.map((l,i)=>`<tr><td>${l.line_no||i+1}</td><td style="position:relative;"><input id="itemSearchInput_${i}" type="text" placeholder="${custId?'Search items...':'Select customer first'}" value="${l.supplier_part_id?l.supplier_part_id+(l.item_id_p21?' (UID:'+l.item_id_p21+')':''):''}" oninput="searchItems(${i},this.value)" ${!custId?'disabled':''} style="width:100%;max-width:200px;"><div id="itemSearchResults_${i}" style="display:none;position:absolute;z-index:100;top:100%;left:0;right:0;background:var(--panel-bg);border:1px solid var(--border-color);border-radius:4px;max-height:200px;overflow-y:auto;margin-top:2px;"></div><select id="editItem_${i}" style="display:none;"><option value="${l.item_id_p21||''}">${l.supplier_part_id||''}</option>${itemOpts}</select></td><td><input id="editDesc_${i}" value="${(l.item_description||'').substring(0,40)}" style="width:100%;max-width:150px;"></td><td><input id="editQty_${i}" type="number" value="${l.qty_ordered||0}" style="width:60px;"></td><td><input id="editPrice_${i}" type="number" step="0.01" value="${(l.unit_price||0).toFixed?.(2)||'0'}" style="width:75px;"></td><td><input id="editUom_${i}" value="${l.unit_of_measure||'EA'}" style="width:50px;"></td></tr>`).join('')}</tbody>
   </table><div style="margin-top:10px;"><label style="font-size:10px;color:var(--text-secondary);text-transform:uppercase;">Notes</label><textarea id="editNotes" rows="2" style="width:100%;margin-top:4px;" placeholder="Special instructions..."></textarea></div></div>`;
 }
-function searchItems(i,q) {
+async function searchItems(i,q) {
   const box=document.getElementById('itemSearchResults_'+i);
-  if(!q||q.length<1){box.style.display='none';return;}
-  const t=q.toLowerCase(),matches=_editCustItems.filter(x=>(x.customer_part_number||'').toLowerCase().includes(t)||(x.p21_item_desc||'').toLowerCase().includes(t)||String(x.p21_inv_mast_uid||'').includes(t)).slice(0,20);
-  if(!matches.length){box.style.display='none';return;}
-  box.innerHTML=matches.map(x=>`<div class="cust-result" onclick="selectItem(${i},'${String(x.p21_inv_mast_uid).replace(/'/g,"\\'")}','${(x.customer_part_number||'').replace(/'/g,"\\'")}','${(x.p21_item_desc||'').replace(/'/g,"\\'")}','${(x.unit_of_measure||'EA').replace(/'/g,"\\'")}','${String(x.unit_price_last||'').replace(/'/g,"\\'")}')"><div style="font-weight:600;font-size:12px;">${x.customer_part_number}</div><div style="font-size:10px;color:var(--text-secondary);">${(x.p21_item_desc||'').substring(0,35)} · UID:${x.p21_inv_mast_uid}</div></div>`).join('');
+  if(!q||q.length<2){box.style.display='none';return;}
+  const t=q.toLowerCase();
+
+  // Customer history items first (fast, local)
+  let histMatches = _editCustItems.filter(x=>
+    (x.customer_part_number||'').toLowerCase().includes(t)||
+    (x.p21_item_desc||'').toLowerCase().includes(t)||
+    String(x.p21_inv_mast_uid||'').includes(t)
+  ).slice(0,10);
+
+  // Also search item_master (V26 — 19k items) for broader coverage
+  let masterMatches = [];
+  try {
+    const resp = await fetch(`${API}/api/v1/lookup/items?q=${encodeURIComponent(q)}&limit=15`, {credentials:'include'});
+    if (resp.ok) {
+      const items = await resp.json();
+      const histUids = new Set(histMatches.map(m=>m.p21_inv_mast_uid));
+      masterMatches = items
+        .filter(x => !histUids.has(x.p21_inv_mast_uid))
+        .map(x => ({
+          customer_part_number: x.p21_inv_mast_uid,
+          p21_inv_mast_uid:     x.p21_inv_mast_uid,
+          p21_item_desc:        x.p21_item_desc,
+          unit_of_measure:      x.default_selling_unit || 'EA',
+          unit_price_last:      '',
+          _catalog:             true,
+        }));
+    }
+  } catch(e) {}
+
+  const all = [...histMatches, ...masterMatches].slice(0,20);
+  if(!all.length){box.style.display='none';return;}
+
+  const esc = s => (s||'').replace(/'/g,"\\'");
+  box.innerHTML = all.map(x=>`<div class="cust-result" onclick="selectItem(${i},'${esc(String(x.p21_inv_mast_uid))}','${esc(x.customer_part_number||'')}','${esc(x.p21_item_desc||'')}','${esc(x.unit_of_measure||'EA')}','${esc(String(x.unit_price_last||''))}')">
+    <div style="font-weight:600;font-size:12px;">${x.customer_part_number||x.p21_inv_mast_uid}${x._catalog?'<span style="margin-left:6px;font-size:9px;color:var(--text-muted);font-weight:400;">CATALOG</span>':x.seen_count?'<span style="margin-left:6px;font-size:9px;color:var(--text-muted);font-weight:400;">('+x.seen_count+'×)</span>':''}</div>
+    <div style="font-size:10px;color:var(--text-secondary);">${(x.p21_item_desc||'').substring(0,40)} · UID:${x.p21_inv_mast_uid}</div>
+  </div>`).join('');
   box.style.display='block';
 }
 function selectItem(i,uid,pn,desc,uom,price){
@@ -1213,7 +1257,7 @@ async function saveEditPO(id,lineCount){
   const po=queue.find(p=>p.intake_id===id);
   const lines=(po?.lines||[]).map((l,i)=>({line_no:l.line_no||i+1,item_id_p21:document.getElementById('editItem_'+i)?.value||'',item_description:document.getElementById('editDesc_'+i)?.value||'',qty_ordered:parseFloat(document.getElementById('editQty_'+i)?.value||0),unit_price:parseFloat(document.getElementById('editPrice_'+i)?.value||0),unit_of_measure:document.getElementById('editUom_'+i)?.value||'EA'}));
   try{
-    const r=await fetch(`${API}/api/v1/review/po/${id}/edit`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer_id_p21:document.getElementById('editCustId')?.value||'',customer_name_p21:document.getElementById('editCustName')?.value||'',ship2_name:document.getElementById('editShipToVisible')?.value||document.getElementById('editShipTo')?.value||'',lines,notes:document.getElementById('editNotes')?.value||''})});
+    const r=await fetch(`${API}/api/v1/review/po/${id}/edit`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer_id_p21:document.getElementById('editCustId')?.value||'',customer_name_p21:document.getElementById('editCustName')?.value||'',ship2_name:document.getElementById('editShipToVisible')?.value||document.getElementById('editShipTo')?.value||'',ship2_add1:document.getElementById('editShipAdd1')?.value||'',ship2_city:document.getElementById('editShipCity')?.value||'',ship2_state:document.getElementById('editShipState')?.value||'',ship2_zip:document.getElementById('editShipZip')?.value||'',lines,notes:document.getElementById('editNotes')?.value||''})});
     if(!r.ok) throw new Error('Save failed');
     const result=await r.json(),nc=result.new_confidence||'?';
     showToast(`Saved — confidence now ${nc.toUpperCase()}${nc==='green'?' ✓':''}`,nc==='green'?'success':'warn',5000);
