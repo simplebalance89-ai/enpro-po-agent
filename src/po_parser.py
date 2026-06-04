@@ -249,22 +249,39 @@ def parse_pdf(file_path: str, _endpoint: str = "", _key: str = "") -> tuple[POHe
             return 0.0
 
     # ── PO Number ───────────────────────────────────────────────────────────
+    # Ordered most-specific first. All require ≥5 char result to avoid
+    # matching substrings like "po" inside "corporation" → "ration".
     po_no = ""
     for pat in [
-        r"P\.?O\.?\s*(?:Number|No\.?|#)?\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{2,29})",
-        r"Purchase\s+Order\s*(?:No\.?|#|Number)?\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{2,29})",
-        r"Order\s+(?:No\.?|Number|#)\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{2,29})",
-        r"(?:^|\n)\s*(?:PO|PO#|Order)\s+([A-Z0-9][A-Z0-9\-\/]{3,29})",
+        # Explicit "PO Number:" / "PO No:" label (most reliable)
+        r"PO\s+Number\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
+        r"PO\s+No\.?\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
+        r"PO\s*#\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
+        # "P.O. Number:" / "P.O. #:" with literal dots
+        r"P\.O\.\s*(?:Number|No\.?|#)?\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
+        # "Purchase Order [Number/No/#]:"
+        r"Purchase\s+Order\s*(?:No\.?|#|Number)?\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
+        # "Order Number:" / "Order No:"
+        r"Order\s+(?:No\.?|Number|#)\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
+        # Line starting with PO followed by digits: "PO34526211"
+        r"^(PO\d{4,12})\b",
+        # "PO " / "PO#" preceded by whitespace, colon, or start-of-line (word-boundary safe)
+        r"(?:^|[\s:(])PO\s*#?\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
     ]:
         m = re.search(pat, full_text, re.IGNORECASE | re.MULTILINE)
         if m:
             candidate = m.group(1).strip().rstrip(".")
-            # Skip obvious non-PO tokens
-            if not re.match(r"^(Date|Terms|Ship|Bill|Net|Page|Rev)$", candidate, re.I):
+            # Must be ≥5 chars and not a common header word
+            if len(candidate) >= 5 and not re.match(
+                r"^(Date|Terms|Ship|Bill|To|Net|Page|Rev|Corp|Inc|LLC|From|Attn)$",
+                candidate, re.IGNORECASE,
+            ):
                 po_no = candidate
                 break
 
-    if not po_no:
+    # Fallback: use filename stem — also used when extraction returns garbage
+    # (anything under 5 chars is considered a failed parse)
+    if not po_no or len(po_no) < 5:
         po_no = os.path.splitext(os.path.basename(file_path))[0][:40]
 
     # ── Order Date ──────────────────────────────────────────────────────────
