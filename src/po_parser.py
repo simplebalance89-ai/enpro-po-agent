@@ -1,6 +1,6 @@
 """
 po_parser.py — Parse cXML and PDF purchase orders into structured models.
-Handles Ariba cXML OrderRequest, Coupa cXML, and PDF via Azure Document Intelligence.
+Handles Ariba cXML OrderRequest, Coupa cXML, and PDF via pdfplumber + regex.
 MRO-specific: blanket POs, releases, line-level ShipTo, GL codes, Extrinsics.
 
 Models aligned to real P21 po_hdr/po_line schema (validated March 2026).
@@ -206,146 +206,215 @@ def parse_cxml(content: str) -> tuple[POHeader, list[POLineItem], str]:
     return header, lines, content
 
 
-def parse_pdf(file_path: str, doc_intel_endpoint: str, doc_intel_key: str) -> tuple[POHeader, list[POLineItem], str]:
-    """Parse PO PDF using Azure Document Intelligence prebuilt invoice model."""
-    from azure.ai.formrecognizer import DocumentAnalysisClient
-    from azure.core.credentials import AzureKeyCredential
+def parse_pdf(file_path: str, _endpoint: str = "", _key: str = "") -> tuple[POHeader, list[POLineItem], str]:
+    """
+    Parse PO PDF using pdfplumber (text + table extraction) and regex heuristics.
 
-    client = DocumentAnalysisClient(
-        endpoint=doc_intel_endpoint,
-        credential=AzureKeyCredential(doc_intel_key)
+    Args:
+        file_path: Path to the PDF file.
+        _endpoint, _key: Ignored — kept for backward-compatible call sites.
+
+    Returns:
+        (POHeader, list[POLineItem], raw_text)
+
+    Raises:
+        ValueError if the PDF cannot be opened or yields no text at all.
+    """
+    import os
+    import re
+    import pdfplumber
+
+    all_text_pages: list[str] = []
+    all_tables: list[list] = []
+
+    with pdfplumber.open(file_path) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text() or ""
+            all_text_pages.append(text)
+            for tbl in (page.extract_tables() or []):
+                if tbl:
+                    all_tables.append(tbl)
+
+    full_text = "\n".join(all_text_pages)
+    if not full_text.strip():
+        raise ValueError("PDF produced no extractable text — may be a scanned image without OCR.")
+
+    raw_text = full_text[:8000]
+
+    # ── Helper: safe float ──────────────────────────────────────────────────
+    def _f(s) -> float:
+        try:
+            return float(str(s or "").replace(",", "").replace("$", "").strip())
+        except (ValueError, TypeError):
+            return 0.0
+
+    # ── PO Number ───────────────────────────────────────────────────────────
+    po_no = ""
+    for pat in [
+        r"P\.?O\.?\s*(?:Number|No\.?|#)?\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{2,29})",
+        r"Purchase\s+Order\s*(?:No\.?|#|Number)?\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{2,29})",
+        r"Order\s+(?:No\.?|Number|#)\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{2,29})",
+        r"(?:^|\n)\s*(?:PO|PO#|Order)\s+([A-Z0-9][A-Z0-9\-\/]{3,29})",
+    ]:
+        m = re.search(pat, full_text, re.IGNORECASE | re.MULTILINE)
+        if m:
+            candidate = m.group(1).strip().rstrip(".")
+            # Skip obvious non-PO tokens
+            if not re.match(r"^(Date|Terms|Ship|Bill|Net|Page|Rev)$", candidate, re.I):
+                po_no = candidate
+                break
+
+    if not po_no:
+        po_no = os.path.splitext(os.path.basename(file_path))[0][:40]
+
+    # ── Order Date ──────────────────────────────────────────────────────────
+    order_date = ""
+    for pat in [
+        r"(?:Order\s+Date|PO\s+Date|Date\s+Issued|Issue\s+Date)\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+        r"(?:Order\s+Date|PO\s+Date|Date\s+Issued|Issue\s+Date)\s*:?\s*(\d{4}-\d{2}-\d{2})",
+        r"(?:^|\s)Date\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+        r"\b(\d{4}-\d{2}-\d{2})\b",
+        r"\b(\d{1,2}/\d{1,2}/\d{4})\b",
+    ]:
+        m = re.search(pat, full_text, re.IGNORECASE | re.MULTILINE)
+        if m:
+            order_date = m.group(1).strip()
+            break
+
+    # ── Ship-To Name ────────────────────────────────────────────────────────
+    ship2_name = ""
+    for pat in [
+        r"Ship\s*(?:To|To:)\s*\n?\s*(.{3,60})",
+        r"Deliver\s*(?:To|To:)\s*\n?\s*(.{3,60})",
+        r"Shipping\s*Address\s*:?\s*\n?\s*(.{3,60})",
+        r"Sold\s*To\s*:?\s*\n?\s*(.{3,60})",
+    ]:
+        m = re.search(pat, full_text, re.IGNORECASE)
+        if m:
+            candidate = m.group(1).split("\n")[0].strip()
+            if len(candidate) >= 3 and not re.match(r"^\d", candidate):
+                ship2_name = candidate[:60]
+                break
+
+    # ── Street Address ──────────────────────────────────────────────────────
+    ship2_add1 = ""
+    addr_m = re.search(
+        r"\b(\d{1,6}\s+[A-Z][a-zA-Z\s]{3,40}(?:St(?:reet)?|Ave(?:nue)?|Blvd|Dr(?:ive)?|Rd|Road|Way|Lane?|Ln|Pkwy|Pl(?:ace)?|Ct|Court|Hwy|Highway)\.?)",
+        full_text,
     )
+    if addr_m:
+        ship2_add1 = addr_m.group(1).strip()[:80]
 
-    with open(file_path, 'rb') as f:
-        poller = client.begin_analyze_document('prebuilt-invoice', f)
-    result = poller.result()
+    # ── City, State, ZIP ────────────────────────────────────────────────────
+    ship2_city, ship2_state, ship2_zip = "", "", ""
+    csz_m = re.search(
+        r"([A-Za-z][A-Za-z\s\.]{2,30}),?\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)",
+        full_text,
+    )
+    if csz_m:
+        ship2_city  = csz_m.group(1).strip()
+        ship2_state = csz_m.group(2)
+        ship2_zip   = csz_m.group(3)
 
-    if not result.documents:
-        raise ValueError(f"No invoice/PO data found in {file_path}")
-
-    doc = result.documents[0]
-    fields = doc.fields
-
-    def _field_val(name, default=''):
-        f = fields.get(name)
-        if f is None:
-            return default
-        if f.value_type == 'currency':
-            return f.value.amount if f.value else 0
-        return f.value if f.value else (f.content if f.content else default)
-
+    # ── Build header ────────────────────────────────────────────────────────
     header = POHeader(
-        po_no=str(_field_val('PurchaseOrder') or _field_val('InvoiceId', '')),
-        order_date='',
-        source_system=SourceSystem.EMAIL,  # PDF attachments come via email too
-        # P21 defaults for Vega
-        po_type='D',
-        source_type=VEGA_SOURCE_TYPE,
-        company_no=1,
-        location_id=10,
-        branch_id='000',
-        ship2_country='US',
-        approved='Y',
+        po_no=po_no,
+        order_date=order_date,
+        ship2_name=ship2_name,
+        ship2_add1=ship2_add1,
+        ship2_city=ship2_city,
+        ship2_state=ship2_state,
+        ship2_zip=ship2_zip,
+        ship2_country="US",
     )
 
-    # Date
-    inv_date = fields.get('InvoiceDate')
-    if inv_date and inv_date.value:
-        header.order_date = str(inv_date.value)[:10]
-
-    header.currency_id = 'USD'
-
-    # Vendor
-    vendor = fields.get('VendorName')
-    if vendor:
-        header.supplier_name = vendor.value or vendor.content or ''
-
-    # Ship To / Customer → ship2_* columns
-    customer = fields.get('CustomerName')
-    if customer:
-        header.ship2_name = customer.value or customer.content or ''
-    cust_addr = fields.get('CustomerAddress')
-    if cust_addr and cust_addr.value:
-        addr = cust_addr.value
-        header.ship2_add1 = addr.street_address or ''
-        header.ship2_city = addr.city or ''
-        header.ship2_state = addr.state or ''
-        header.ship2_zip = addr.postal_code or ''
-
-    # Ship To override (more specific)
-    ship_addr = fields.get('ShippingAddress')
-    if ship_addr and ship_addr.value:
-        addr = ship_addr.value
-        if not header.ship2_name:
-            header.ship2_name = str(_field_val('ShippingAddressRecipient', ''))
-        header.ship2_add1 = addr.street_address or ''
-        header.ship2_city = addr.city or ''
-        header.ship2_state = addr.state or ''
-        header.ship2_zip = addr.postal_code or ''
-
-    header.terms = str(_field_val('PaymentTerm', ''))
-
-    # Line items
+    # ── Line items: table extraction ────────────────────────────────────────
     lines: list[POLineItem] = []
-    items_field = fields.get('Items')
-    if items_field and items_field.value:
-        for i, item in enumerate(items_field.value):
-            item_fields = item.value if item.value else {}
-            line = POLineItem(
-                line_no=(i + 1) * 10,
-                date_due=header.order_date,
-                # P21 defaults
-                source_type=VEGA_SOURCE_TYPE,
-                calc_type='MULTIPLIER',
-                calc_value=1.0,
-                unit_size=1.0,
-                unit_quantity=1.0,
-                pricing_unit_size=1.0,
-                inventory_flag='N',
-            )
+    line_counter = 10
 
-            if line.date_due:
-                line.required_date = line.date_due
+    for table in all_tables:
+        if not table or len(table) < 2:
+            continue
+        header_row = [str(c or "").lower().strip() for c in (table[0] or [])]
 
-            desc = item_fields.get('Description')
-            if desc:
-                line.item_description = desc.value or desc.content or ''
+        # Locate columns by header keyword
+        def _col(*keywords):
+            for kw in keywords:
+                for i, h in enumerate(header_row):
+                    if kw in h:
+                        return i
+            return None
 
-            qty = item_fields.get('Quantity')
-            if qty and qty.value:
-                line.qty_ordered = float(qty.value)
+        c_part  = _col("part", "item #", "item#", "product code", "catalog", "sku")
+        c_desc  = _col("desc", "item desc", "product", "name", "material")
+        c_qty   = _col("qty", "quantity", "ordered", "order qty")
+        c_price = _col("unit price", "unit cost", "price each", "u/p", "price")
+        c_ext   = _col("extended", "ext price", "amount", "total", "ext. price")
+        c_uom   = _col("uom", "u/m", "unit of measure", "unit")
+        c_date  = _col("required", "need by", "deliver", "due date", "ship date")
 
-            price = item_fields.get('UnitPrice')
-            if price and price.value:
-                line.unit_price = price.value.amount if hasattr(price.value, 'amount') else float(price.value)
-                line.unit_price_display = line.unit_price
-                line.base_ut_price = line.unit_price
+        for row in table[1:]:
+            if not row or all(not str(c or "").strip() for c in row):
+                continue
 
-            amount = item_fields.get('Amount')
-            if amount and amount.value:
-                amt = amount.value.amount if hasattr(amount.value, 'amount') else float(amount.value)
-                if line.unit_price == 0 and line.qty_ordered > 0:
-                    line.unit_price = amt / line.qty_ordered
-                    line.unit_price_display = line.unit_price
-                    line.base_ut_price = line.unit_price
+            def _cell(idx):
+                if idx is not None and idx < len(row):
+                    return str(row[idx] or "").strip()
+                return ""
 
-            prod_code = item_fields.get('ProductCode')
-            if prod_code:
-                line.supplier_part_id = prod_code.value or prod_code.content or ''
+            part  = _cell(c_part)[:40]
+            desc  = _cell(c_desc)[:80]
+            qty   = _f(_cell(c_qty))
+            price = _f(_cell(c_price))
+            ext   = _f(_cell(c_ext))
+            uom   = _cell(c_uom) or "EA"
+            req   = _cell(c_date)[:10]
 
-            uom = item_fields.get('Unit')
-            if uom and uom.value:
-                line.unit_of_measure = uom.value
-            line.pricing_unit = line.unit_of_measure
+            # Derive price from extended if missing
+            if price == 0 and ext > 0 and qty > 0:
+                price = round(ext / qty, 4)
 
-            date_f = item_fields.get('Date')
-            if date_f and date_f.value:
-                line.date_due = str(date_f.value)[:10]
-                line.required_date = line.date_due
+            # Skip header-like or empty rows
+            if not desc and not part:
+                continue
+            if qty == 0 and price == 0:
+                continue
 
-            lines.append(line)
+            lines.append(POLineItem(
+                line_no=line_counter,
+                supplier_part_id=part,
+                item_description=desc,
+                qty_ordered=max(qty, 1.0),
+                unit_price=price,
+                unit_of_measure=uom[:10],
+                required_date=req or order_date,
+            ))
+            line_counter += 10
 
-    raw_text = result.content[:8000] if result.content else ''
+    # ── Line items: regex fallback when tables empty ─────────────────────────
+    if not lines:
+        row_pat = re.compile(
+            r"^\s*(\d+)\s+"
+            r"([A-Z0-9][\w\-\.\/]{1,38})\s+"
+            r"(.{5,60}?)\s{2,}"
+            r"(\d+(?:\.\d+)?)\s+"
+            r"\$?\s*(\d[\d,]*(?:\.\d{1,4})?)",
+            re.MULTILINE,
+        )
+        for m in row_pat.finditer(full_text):
+            try:
+                lines.append(POLineItem(
+                    line_no=int(m.group(1)) * 10,
+                    supplier_part_id=m.group(2).strip(),
+                    item_description=m.group(3).strip(),
+                    qty_ordered=_f(m.group(4)),
+                    unit_price=_f(m.group(5)),
+                    unit_of_measure="EA",
+                    required_date=order_date,
+                ))
+            except Exception:
+                continue
+
     return header, lines, raw_text
 
 

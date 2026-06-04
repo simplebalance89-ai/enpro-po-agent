@@ -775,9 +775,7 @@ async def intake_upload(
             tmp.write(content)
             tmp_path = tmp.name
         try:
-            header, lines, raw = po_parser.parse_pdf(
-                tmp_path, settings.doc_intel_endpoint, settings.doc_intel_key
-            )
+            header, lines, raw = po_parser.parse_pdf(tmp_path)
         except Exception as pdf_err:
             os.unlink(tmp_path)
             # Fallback: Document Intelligence failed — create a manual-review RED PO
@@ -842,11 +840,7 @@ async def poll_now():
                             tmp.write(att.content_bytes)
                             tmp_path = tmp.name
                         try:
-                            header, lines, raw = po_parser.parse_pdf(
-                                tmp_path,
-                                settings.doc_intel_endpoint,
-                                settings.doc_intel_key,
-                            )
+                            header, lines, raw = po_parser.parse_pdf(tmp_path)
                         finally:
                             os.unlink(tmp_path)
                         await _process_po_to_so(header, lines, raw, "email", "pdf")
@@ -1639,9 +1633,7 @@ async def generate_p21_payload_from_file(file: UploadFile = File(...)):
             tmp.write(content)
             tmp_path = tmp.name
         try:
-            header, lines, raw = po_parser.parse_pdf(
-                tmp_path, settings.doc_intel_endpoint, settings.doc_intel_key
-            )
+            header, lines, raw = po_parser.parse_pdf(tmp_path)
         finally:
             os.unlink(tmp_path)
     else:
@@ -3032,9 +3024,7 @@ async def _bootstrap_crosswalks_if_empty():
                         tmp.write(content)
                         tmp_path = tmp.name
                     try:
-                        header, lines, raw = po_parser.parse_pdf(
-                            tmp_path, settings.doc_intel_endpoint, settings.doc_intel_key
-                        )
+                        header, lines, raw = po_parser.parse_pdf(tmp_path)
                     finally:
                         os.unlink(tmp_path)
                 elif fname_lower.endswith((".xml", ".cxml")):

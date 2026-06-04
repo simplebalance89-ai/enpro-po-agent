@@ -28,11 +28,6 @@ class Settings(BaseSettings):
     blob_container: str = "ariba-coupa"
     blob_connection_string: str = ""
 
-    # ── Azure Document Intelligence (PDF parsing) ──
-    # Bicep injects: DOC_INTEL_ENDPOINT, DOC_INTEL_KEY
-    doc_intel_endpoint: str = ""
-    doc_intel_key: str = ""
-
     # ── Azure OpenAI (optional — for AI-assisted field mapping) ──
     # Bicep injects: AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY, AZURE_OPENAI_MODEL
     azure_openai_endpoint: str = ""

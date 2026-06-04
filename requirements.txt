@@ -20,8 +20,8 @@ pydantic-settings>=2.1.0
 python-dotenv>=1.0.0
 filelock>=3.13.0
 
-# Azure AI (for PDF parsing via Document Intelligence)
-azure-ai-formrecognizer>=3.3.0
+# PDF parsing (open-source, replaces Azure Document Intelligence)
+pdfplumber>=0.10.3
 
 # XML Parsing (for cXML)
 defusedxml>=0.7.1
