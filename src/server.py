@@ -3631,7 +3631,7 @@ def _build_invoice_payload(inv: dict) -> dict:
     """Build and return payload dict: {source_system, content_type, payload_str}"""
     src = inv.get("source_system") or _invoice_source_system(inv.get("customer_id", ""))
     if src == "coupa":
-        payload = _json.dumps(_build_coupa_json(inv), indent=2)
+        payload = json.dumps(_build_coupa_json(inv), indent=2)
         content_type = "application/json"
     else:
         payload = _build_ariba_cxml(inv)
