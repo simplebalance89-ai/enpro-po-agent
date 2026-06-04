@@ -1243,8 +1243,8 @@ let invoices = [], invFilter = 'all', selectedInvId = null;
 async function loadInvoices(filter) {
   try {
     const url = filter && filter !== 'all'
-      ? `${API}/api/v1/invoices/queue?status=${filter}`
-      : `${API}/api/v1/invoices/queue`;
+      ? `${API}/api/v1/invoice-module/queue?status=${filter}`
+      : `${API}/api/v1/invoice-module/queue`;
     invoices = await (await fetch(url, { credentials:'include' })).json();
     renderInvoiceQueue();
   } catch(e) {
@@ -1373,7 +1373,7 @@ async function loadInvoicePayload(invoiceId) {
   document.getElementById('invDownloadBtn').disabled = true;
 
   try {
-    const resp = await fetch(`${API}/api/v1/invoices/${invoiceId}/payload`, { credentials:'include' });
+    const resp = await fetch(`${API}/api/v1/invoice-module/${invoiceId}/payload`, { credentials:'include' });
     const data = await resp.json();
     const inv  = invoices.find(i => i.invoice_id === invoiceId);
 
@@ -1401,7 +1401,7 @@ async function sendInvoice() {
 
 async function sendSingleInvoice(id) {
   try {
-    const resp = await fetch(`${API}/api/v1/invoices/${id}/send`, {
+    const resp = await fetch(`${API}/api/v1/invoice-module/${id}/send`, {
       method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}
     });
     const data = await resp.json();
@@ -1418,7 +1418,7 @@ async function rejectSingleInvoice(id) {
   const reason = prompt('Rejection reason:');
   if (!reason) return;
   try {
-    await fetch(`${API}/api/v1/invoices/${id}/reject`, {
+    await fetch(`${API}/api/v1/invoice-module/${id}/reject`, {
       method:'POST', credentials:'include',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ reason, reviewer: currentUser?.name||'Reviewer' })
@@ -1434,7 +1434,7 @@ async function rejectSingleInvoice(id) {
 
 function downloadInvoicePayload() {
   if (!selectedInvId) return;
-  window.open(`${API}/api/v1/invoices/download/${selectedInvId}`, '_blank');
+  window.open(`${API}/api/v1/invoice-module/download/${selectedInvId}`, '_blank');
 }
 
 function copyInvPayload() {
@@ -1451,7 +1451,7 @@ async function sendAllPendingInvoices() {
   if (!pending) { showToast('No pending invoices', 'warn'); return; }
   if (!confirm(`Send all ${pending} pending invoices?`)) return;
   try {
-    const resp = await fetch(`${API}/api/v1/invoices/batch/send`, {
+    const resp = await fetch(`${API}/api/v1/invoice-module/batch/send`, {
       method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}
     });
     const data = await resp.json();
@@ -1466,7 +1466,7 @@ async function uploadInvoiceCSV() {
   const fd = new FormData(); fd.append('file', fi.files[0]);
   const re = document.getElementById('invUploadResult'); re.textContent = 'Uploading...';
   try {
-    const d = await (await fetch(`${API}/api/v1/invoices/upload-csv`, {
+    const d = await (await fetch(`${API}/api/v1/invoice-module/upload-csv`, {
       method:'POST', credentials:'include', body:fd
     })).json();
     re.textContent = `Uploaded ${d.uploaded} invoice${d.uploaded!==1?'s':''}`;
@@ -1477,7 +1477,7 @@ async function uploadInvoiceCSV() {
 
 async function seedSampleInvoices() {
   try {
-    const d = await (await fetch(`${API}/api/v1/invoices/seed`, {
+    const d = await (await fetch(`${API}/api/v1/invoice-module/seed`, {
       method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}
     })).json();
     showToast(`Seeded ${d.seeded} sample invoices`, 'success');

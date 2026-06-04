@@ -3679,7 +3679,7 @@ def _parse_invoice_csv(content: str) -> list[dict]:
     return list(by_invoice.values())
 
 
-@app.get("/api/v1/invoices/queue")
+@app.get("/api/v1/invoice-module/queue")
 async def invoice_queue(status: Optional[str] = None):
     """List invoices — pending by default, or filter by status (pending/sent/failed/rejected)."""
     all_inv = list_invoices()
@@ -3702,7 +3702,7 @@ async def invoice_queue(status: Optional[str] = None):
     } for inv in all_inv]
 
 
-@app.post("/api/v1/invoices/upload-csv")
+@app.post("/api/v1/invoice-module/upload-csv")
 async def upload_invoice_csv(file: UploadFile = File(...)):
     """Upload P21 invoice extract CSV. Parses and stores each invoice."""
     content = (await file.read()).decode("utf-8-sig")
@@ -3722,7 +3722,7 @@ async def upload_invoice_csv(file: UploadFile = File(...)):
     return {"uploaded": len(stored), "invoice_ids": stored}
 
 
-@app.post("/api/v1/invoices/{invoice_id}/approve")
+@app.post("/api/v1/invoice-module/{invoice_id}/approve")
 async def approve_invoice(invoice_id: str):
     """Approve an invoice — marks it ready_to_send."""
     inv = get_invoice(invoice_id)
@@ -3735,7 +3735,7 @@ async def approve_invoice(invoice_id: str):
     return {"status": "ready_to_send", "invoice_id": invoice_id}
 
 
-@app.post("/api/v1/invoices/{invoice_id}/reject")
+@app.post("/api/v1/invoice-module/{invoice_id}/reject")
 async def reject_invoice(invoice_id: str, req: RejectRequest):
     """Reject an invoice."""
     inv = get_invoice(invoice_id)
@@ -3745,7 +3745,7 @@ async def reject_invoice(invoice_id: str, req: RejectRequest):
     return {"status": "rejected", "invoice_id": invoice_id}
 
 
-@app.post("/api/v1/invoices/{invoice_id}/send")
+@app.post("/api/v1/invoice-module/{invoice_id}/send")
 async def send_invoice(invoice_id: str):
     """Send invoice to Ariba or Coupa. Mock mode if endpoint not configured."""
     inv = get_invoice(invoice_id)
@@ -3765,7 +3765,7 @@ async def send_invoice(invoice_id: str):
             "message": f"Payload ready — no live {inv.get('source_system','ariba').upper()} endpoint configured"}
 
 
-@app.get("/api/v1/invoices/{invoice_id}/payload")
+@app.get("/api/v1/invoice-module/{invoice_id}/payload")
 async def get_invoice_payload(invoice_id: str):
     """Get invoice payload (auto-build if not present)."""
     inv = get_invoice(invoice_id)
@@ -3784,7 +3784,7 @@ async def get_invoice_payload(invoice_id: str):
     }
 
 
-@app.get("/api/v1/invoices/download/{invoice_id}")
+@app.get("/api/v1/invoice-module/download/{invoice_id}")
 async def download_invoice_payload(invoice_id: str):
     """Download invoice payload as file."""
     from starlette.responses import Response as _Resp
@@ -3803,7 +3803,7 @@ async def download_invoice_payload(invoice_id: str):
                  headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
-@app.post("/api/v1/invoices/batch/send")
+@app.post("/api/v1/invoice-module/batch/send")
 async def batch_send_invoices():
     """Send all pending or ready_to_send invoices."""
     all_inv = list_invoices()
@@ -3819,7 +3819,7 @@ async def batch_send_invoices():
     return {"sent_count": len(sent), "invoice_ids": sent}
 
 
-@app.post("/api/v1/invoices/seed")
+@app.post("/api/v1/invoice-module/seed")
 async def seed_sample_invoices():
     """Seed 10 sample invoices using real crosswalk customers."""
     samples = [
