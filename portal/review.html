@@ -408,10 +408,7 @@ input:focus, select:focus, textarea:focus { outline:1px solid #3b82f6; }
     <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark mode">☀️</button>
     <div class="user-chip">
       <div class="user-avatar" id="userAvatar">?</div>
-      <div>
-        <div style="font-size:12px;font-weight:700;color:#fff;" id="userName">—</div>
-        <div style="font-size:10px;color:rgba(255,255,255,.5);" id="userRole">—</div>
-      </div>
+      <span style="font-size:12px;font-weight:700;color:#fff;" id="userName">—</span>
     </div>
     <button class="logout-btn" onclick="doLogout()">Logout</button>
   </div>
@@ -601,9 +598,9 @@ function activatePortal() {
   const wrap = document.getElementById('portal-wrap');
   wrap.style.display = 'flex';
   // Set user display
-  document.getElementById('userName').textContent   = currentUser.name;
-  document.getElementById('userRole').textContent   = currentUser.role;
-  document.getElementById('userAvatar').textContent = currentUser.name.charAt(0).toUpperCase();
+  const firstName = currentUser.name.split(' ')[0];
+  document.getElementById('userName').textContent   = firstName;
+  document.getElementById('userAvatar').textContent = firstName.charAt(0).toUpperCase();
   // Boot portal
   Promise.all([loadQueue('all'), loadStats()]).then(() => {
     if (queue.length) selectPO(queue[0].intake_id);
@@ -703,14 +700,39 @@ function renderPoRow(po) {
   const srcTag = po.source === 'ariba' ? '<span class="src-tag ariba">Ariba</span>'
                : po.source === 'coupa' ? '<span class="src-tag coupa">Coupa</span>'
                : '<span class="src-tag direct">Email</span>';
-  const confColor = po.confidence === 'red' ? '#ef4444' : po.confidence === 'yellow' ? '#f59e0b' : '#22c55e';
-  const score = po.customer_score != null ? ` · ${(po.customer_score * 100).toFixed(0)}%` : '';
+
+  // ── Customer match line ──────────────────────────────────────────────────
+  const custPct  = Math.round((po.customer_score || 0) * 100);
+  let custLine;
+  if (custPct >= 90) {
+    custLine = `<span style="color:#22c55e;">✓ ${po.customer_p21 || 'Customer matched'}</span>`;
+  } else if (custPct >= 65) {
+    custLine = `<span style="color:#f59e0b;">~ ${po.customer_p21 || po.ship_to || 'Partial match'} (${custPct}%)</span>`;
+  } else {
+    const ship = po.ship_to ? ` · ${po.ship_to.substring(0,24)}` : '';
+    custLine = `<span style="color:#ef4444;">✗ No customer match${ship}</span>`;
+  }
+
+  // ── Item match line ──────────────────────────────────────────────────────
+  const scores  = po.item_scores || [];
+  const total   = po.lines_count || scores.length;
+  const matched = scores.filter(s => s >= 0.9).length;
+  let itemLine  = '';
+  if (total > 0) {
+    if (matched === total) {
+      itemLine = `<span style="color:#22c55e;"> · Items: ${matched}/${total}</span>`;
+    } else if (matched > 0) {
+      itemLine = `<span style="color:#f59e0b;"> · Items: ${matched}/${total} matched</span>`;
+    } else {
+      itemLine = `<span style="color:#ef4444;"> · Items: 0/${total} matched</span>`;
+    }
+  }
+
   return `<div class="po-item ${selectedId === po.intake_id ? 'selected' : ''}"
        onclick="selectPO('${po.intake_id}')" tabindex="0"
        onkeydown="if(event.key==='Enter')selectPO('${po.intake_id}')">
     <div><span class="dot ${po.confidence}"></span><span class="po-num">${po.po_number || 'Unknown'}</span>${srcTag}</div>
-    <div class="po-meta">${po.customer_p21 || po.ship_to || '— no customer match —'}</div>
-    <div class="po-conf" style="color:${confColor};">${(po.confidence||'').toUpperCase()}${score}${po.reason ? ' · ' + po.reason.substring(0,30) : ''}</div>
+    <div class="po-meta" style="margin-top:3px;">${custLine}${itemLine}</div>
   </div>`;
 }
 
