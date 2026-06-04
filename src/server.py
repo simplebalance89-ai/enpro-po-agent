@@ -3505,3 +3505,346 @@ async def send_invoice_to_coupa(invoice_id: str, req: InvoiceSendRequest, _auth=
             "last_error": str(e),
         })
         raise HTTPException(502, detail={"message": "Failed to send invoice to Coupa", "detail": str(e)})
+
+
+# ── Invoice Module v2 — Demo-ready endpoints ─────────────────────────────────
+# These endpoints work without invoice_module_enabled and support CSV upload,
+# Ariba cXML payloads, Coupa JSON payloads, approve/reject, and batch send.
+
+import hashlib as _hashlib
+import xml.etree.ElementTree as _ET
+
+_ARIBA_CUSTOMERS = {
+    "200121","208426","203471","207872","204150","207607","208421","204260","306771","207716"
+}
+_COUPA_CUSTOMERS = {
+    "206035","200513","205592","205382","202846","208960","201006","200543","308110"
+}
+
+def _invoice_source_system(customer_id: str) -> str:
+    if customer_id in _ARIBA_CUSTOMERS:
+        return "ariba"
+    if customer_id in _COUPA_CUSTOMERS:
+        return "coupa"
+    return "ariba"  # default
+
+
+def _build_ariba_cxml(inv: dict) -> str:
+    """Build Ariba-style cXML InvoiceDetailRequest."""
+    lines = inv.get("lines", [])
+    subtotal = round(sum(float(l.get("extended_price", 0)) for l in lines), 2)
+    total    = float(inv.get("total_amount", subtotal))
+    tax      = float(inv.get("tax_amount", 0))
+    freight  = float(inv.get("freight_amount", 0))
+    bill2    = inv.get("bill2_name", "Customer")
+    po_no    = inv.get("po_no", inv.get("order_no", ""))
+    inv_date = (inv.get("invoice_date") or datetime.utcnow().strftime("%Y-%m-%d"))[:10]
+    anid     = inv.get("ariba_network_id", "AN01234567890")
+    ts       = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S-00:00")
+
+    line_xml = ""
+    for i, l in enumerate(lines, 1):
+        desc = (l.get("item_desc") or l.get("description") or "").replace("&", "&amp;").replace("<", "&lt;")
+        line_xml += f"""
+      <InvoiceDetailItem invoiceLineNumber="{i}" quantity="{l.get('qty_shipped', l.get('qty_invoiced', 1))}">
+        <UnitOfMeasure>{l.get('uom', 'EA')}</UnitOfMeasure>
+        <UnitPrice><Money currency="USD">{float(l.get('unit_price', 0)):.2f}</Money></UnitPrice>
+        <InvoiceDetailItemReference lineNumber="{i}">
+          <ItemID><SupplierPartID>{l.get('item_id', '')}</SupplierPartID></ItemID>
+          <Description xml:lang="en">{desc}</Description>
+        </InvoiceDetailItemReference>
+        <SubtotalAmount><Money currency="USD">{float(l.get('extended_price', 0)):.2f}</Money></SubtotalAmount>
+      </InvoiceDetailItem>"""
+
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE cXML SYSTEM "http://xml.cXML.org/schemas/cXML/1.2.069/cXML.dtd">
+<cXML payloadID="{inv['invoice_id']}@enpro.com" timestamp="{ts}" version="1.2.069">
+  <Header>
+    <From><Credential domain="AribaNetworkId"><Identity>AN-ENPRO-SUPPLIER</Identity></Credential></From>
+    <To><Credential domain="AribaNetworkId"><Identity>{anid}</Identity></Credential></To>
+    <Sender>
+      <Credential domain="AribaNetworkId"><Identity>AN-ENPRO-SUPPLIER</Identity></Credential>
+      <UserAgent>EnPro PO Agent</UserAgent>
+    </Sender>
+  </Header>
+  <Request>
+    <InvoiceDetailRequest>
+      <InvoiceDetailRequestHeader invoiceID="{inv['invoice_no']}" invoiceDate="{inv_date}" operation="new" purpose="standard">
+        <InvoiceDetailHeaderIndicator/>
+        <InvoiceDetailLineIndicator isAccountingInLine="no"/>
+        <InvoicePartner>
+          <Contact role="remitTo"><Name xml:lang="en">EnPro Industries</Name></Contact>
+        </InvoicePartner>
+        <InvoicePartner>
+          <Contact role="billTo"><Name xml:lang="en">{bill2.replace("&","&amp;")}</Name></Contact>
+        </InvoicePartner>
+        <PaymentTerm payInNumberOfDays="30"/>
+      </InvoiceDetailRequestHeader>
+      <InvoiceDetailOrder>
+        <InvoiceDetailOrderInfo>
+          <OrderReference orderID="{po_no}"/>
+        </InvoiceDetailOrderInfo>{line_xml}
+      </InvoiceDetailOrder>
+      <InvoiceDetailSummary>
+        <SubtotalAmount><Money currency="USD">{subtotal:.2f}</Money></SubtotalAmount>
+        <Tax><TaxAmount><Money currency="USD">{tax:.2f}</Money></TaxAmount><Description xml:lang="en">Tax</Description></Tax>
+        <ShippingAmount><Money currency="USD">{freight:.2f}</Money></ShippingAmount>
+        <NetAmount><Money currency="USD">{total:.2f}</Money></NetAmount>
+        <DepositAmount><Money currency="USD">0.00</Money></DepositAmount>
+      </InvoiceDetailSummary>
+    </InvoiceDetailRequest>
+  </Request>
+</cXML>"""
+
+
+def _build_coupa_json(inv: dict) -> dict:
+    """Build Coupa REST API invoice JSON."""
+    lines = inv.get("lines", [])
+    return {
+        "invoice-number":   inv.get("invoice_no", ""),
+        "invoice-date":     (inv.get("invoice_date") or "")[:10],
+        "currency-code":    "USD",
+        "status":           "pending_receipt",
+        "supplier":         {"name": "EnPro Industries"},
+        "bill-to-address":  {"name": inv.get("bill2_name", "")},
+        "ship-to-address":  {"name": inv.get("bill2_name", "")},
+        "payment-term":     {"code": "NET30"},
+        "invoice-lines": [
+            {
+                "line-num":    i,
+                "description": l.get("item_desc") or l.get("description") or "",
+                "quantity":    l.get("qty_shipped") or l.get("qty_invoiced") or 1,
+                "unit-price":  float(l.get("unit_price", 0)),
+                "price":       float(l.get("extended_price", 0)),
+                "uom":         {"code": l.get("uom", "EA")},
+                "item":        {"name": l.get("item_id", ""), "item-number": l.get("item_id", "")},
+            }
+            for i, l in enumerate(lines, 1)
+        ],
+        "total-with-taxes": float(inv.get("total_amount", 0)),
+        "tax-amount":       float(inv.get("tax_amount", 0)),
+        "shipping-amount":  float(inv.get("freight_amount", 0)),
+    }
+
+
+def _build_invoice_payload(inv: dict) -> dict:
+    """Build and return payload dict: {source_system, content_type, payload_str}"""
+    src = inv.get("source_system") or _invoice_source_system(inv.get("customer_id", ""))
+    if src == "coupa":
+        payload = _json.dumps(_build_coupa_json(inv), indent=2)
+        content_type = "application/json"
+    else:
+        payload = _build_ariba_cxml(inv)
+        content_type = "text/xml"
+    return {"source_system": src, "content_type": content_type, "payload": payload}
+
+
+def _parse_invoice_csv(content: str) -> list[dict]:
+    """Parse P21 invoice extract CSV into invoice dicts."""
+    import csv as _csv
+    from io import StringIO
+
+    reader = _csv.DictReader(StringIO(content))
+    by_invoice: dict[str, dict] = {}
+
+    for row in reader:
+        inv_no = (row.get("invoice_no") or row.get("INVOICE_NO") or "").strip()
+        if not inv_no:
+            continue
+        if inv_no not in by_invoice:
+            by_invoice[inv_no] = {
+                "invoice_no":     inv_no,
+                "order_no":       row.get("order_no", "").strip(),
+                "customer_id":    row.get("customer_id", "").strip(),
+                "bill2_name":     row.get("bill2_name", "").strip(),
+                "invoice_date":   row.get("invoice_date", "").strip()[:10],
+                "ship_date":      row.get("ship_date", "").strip()[:10],
+                "total_amount":   float(row.get("total_amount") or 0),
+                "tax_amount":     float(row.get("tax_amount") or 0),
+                "freight_amount": float(row.get("freight_amount") or 0),
+                "po_no":          row.get("po_no", "").strip(),
+                "lines":          [],
+            }
+        line_no = row.get("line_no", "").strip()
+        if line_no:
+            by_invoice[inv_no]["lines"].append({
+                "line_no":        line_no,
+                "item_id":        row.get("item_id", "").strip(),
+                "item_desc":      row.get("item_desc", "").strip(),
+                "qty_shipped":    float(row.get("qty_shipped") or 0),
+                "unit_price":     float(row.get("unit_price") or 0),
+                "extended_price": float(row.get("extended_price") or 0),
+                "uom":            "EA",
+            })
+    return list(by_invoice.values())
+
+
+@app.get("/api/v1/invoices/queue")
+async def invoice_queue(status: Optional[str] = None):
+    """List invoices — pending by default, or filter by status (pending/sent/failed/rejected)."""
+    all_inv = list_invoices()
+    if status:
+        all_inv = [i for i in all_inv if i.get("status") == status]
+    return [{
+        "invoice_id":   inv.get("invoice_id"),
+        "invoice_no":   inv.get("invoice_no"),
+        "customer_id":  inv.get("customer_id"),
+        "customer_name": inv.get("bill2_name", ""),
+        "invoice_date": inv.get("invoice_date", "")[:10],
+        "total_amount": inv.get("total_amount", 0),
+        "status":       inv.get("status", "pending"),
+        "source_system":inv.get("source_system", "ariba"),
+        "po_no":        inv.get("po_no", ""),
+        "order_no":     inv.get("order_no", ""),
+        "lines_count":  len(inv.get("lines", [])),
+        "sent_at":      inv.get("sent_at"),
+        "error":        inv.get("last_error"),
+    } for inv in all_inv]
+
+
+@app.post("/api/v1/invoices/upload-csv")
+async def upload_invoice_csv(file: UploadFile = File(...)):
+    """Upload P21 invoice extract CSV. Parses and stores each invoice."""
+    content = (await file.read()).decode("utf-8-sig")
+    invoices = _parse_invoice_csv(content)
+    stored = []
+    for inv in invoices:
+        inv_id = f"INV-{_hashlib.md5((inv['invoice_no']+inv.get('customer_id','')).encode()).hexdigest()[:10].upper()}"
+        inv["invoice_id"]    = inv_id
+        inv["status"]        = "pending"
+        inv["source_system"] = _invoice_source_system(inv.get("customer_id", ""))
+        # Build payload immediately
+        pb = _build_invoice_payload(inv)
+        inv["payload"]       = pb["payload"]
+        inv["content_type"]  = pb["content_type"]
+        save_invoice(inv_id, inv)
+        stored.append(inv_id)
+    return {"uploaded": len(stored), "invoice_ids": stored}
+
+
+@app.post("/api/v1/invoices/{invoice_id}/approve")
+async def approve_invoice(invoice_id: str):
+    """Approve an invoice — marks it ready_to_send."""
+    inv = get_invoice(invoice_id)
+    if not inv:
+        raise HTTPException(404, f"Invoice {invoice_id} not found")
+    if not inv.get("payload"):
+        pb = _build_invoice_payload(inv)
+        update_invoice(invoice_id, {"payload": pb["payload"], "content_type": pb["content_type"]})
+    update_invoice(invoice_id, {"status": "ready_to_send", "approved_at": datetime.utcnow().isoformat()})
+    return {"status": "ready_to_send", "invoice_id": invoice_id}
+
+
+@app.post("/api/v1/invoices/{invoice_id}/reject")
+async def reject_invoice(invoice_id: str, req: RejectRequest):
+    """Reject an invoice."""
+    inv = get_invoice(invoice_id)
+    if not inv:
+        raise HTTPException(404, f"Invoice {invoice_id} not found")
+    update_invoice(invoice_id, {"status": "rejected", "reject_reason": req.reason, "rejected_at": datetime.utcnow().isoformat()})
+    return {"status": "rejected", "invoice_id": invoice_id}
+
+
+@app.post("/api/v1/invoices/{invoice_id}/send")
+async def send_invoice(invoice_id: str):
+    """Send invoice to Ariba or Coupa. Mock mode if endpoint not configured."""
+    inv = get_invoice(invoice_id)
+    if not inv:
+        raise HTTPException(404, f"Invoice {invoice_id} not found")
+    if not inv.get("payload"):
+        pb = _build_invoice_payload(inv)
+        update_invoice(invoice_id, {"payload": pb["payload"], "content_type": pb["content_type"]})
+        inv = get_invoice(invoice_id)
+    # Mock mode (no live endpoint configured)
+    update_invoice(invoice_id, {
+        "status":  "sent",
+        "sent_at": datetime.utcnow().isoformat(),
+        "mode":    "mock",
+    })
+    return {"status": "sent", "invoice_id": invoice_id, "mode": "mock",
+            "message": f"Payload ready — no live {inv.get('source_system','ariba').upper()} endpoint configured"}
+
+
+@app.get("/api/v1/invoices/{invoice_id}/payload")
+async def get_invoice_payload(invoice_id: str):
+    """Get invoice payload (auto-build if not present)."""
+    inv = get_invoice(invoice_id)
+    if not inv:
+        raise HTTPException(404, f"Invoice {invoice_id} not found")
+    if not inv.get("payload"):
+        pb = _build_invoice_payload(inv)
+        update_invoice(invoice_id, {"payload": pb["payload"], "content_type": pb["content_type"]})
+        inv = get_invoice(invoice_id)
+    return {
+        "invoice_id":   invoice_id,
+        "invoice_no":   inv.get("invoice_no"),
+        "source_system":inv.get("source_system", "ariba"),
+        "content_type": inv.get("content_type", "text/xml"),
+        "payload":      inv.get("payload", ""),
+    }
+
+
+@app.get("/api/v1/invoices/download/{invoice_id}")
+async def download_invoice_payload(invoice_id: str):
+    """Download invoice payload as file."""
+    from starlette.responses import Response as _Resp
+    inv = get_invoice(invoice_id)
+    if not inv:
+        raise HTTPException(404, f"Invoice {invoice_id} not found")
+    if not inv.get("payload"):
+        pb = _build_invoice_payload(inv)
+        update_invoice(invoice_id, {"payload": pb["payload"], "content_type": pb["content_type"]})
+        inv = get_invoice(invoice_id)
+    src  = inv.get("source_system", "ariba")
+    ext  = "json" if src == "coupa" else "xml"
+    ct   = inv.get("content_type", "text/xml")
+    fname = f"invoice_{inv.get('invoice_no', invoice_id)}.{ext}"
+    return _Resp(content=inv["payload"].encode(), media_type=ct,
+                 headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
+@app.post("/api/v1/invoices/batch/send")
+async def batch_send_invoices():
+    """Send all pending or ready_to_send invoices."""
+    all_inv = list_invoices()
+    pending  = [i for i in all_inv if i.get("status") in ("pending", "ready_to_send")]
+    sent = []
+    for inv in pending:
+        inv_id = inv.get("invoice_id", "")
+        if not inv.get("payload"):
+            pb = _build_invoice_payload(inv)
+            update_invoice(inv_id, {"payload": pb["payload"], "content_type": pb["content_type"]})
+        update_invoice(inv_id, {"status": "sent", "sent_at": datetime.utcnow().isoformat(), "mode": "mock"})
+        sent.append(inv_id)
+    return {"sent_count": len(sent), "invoice_ids": sent}
+
+
+@app.post("/api/v1/invoices/seed")
+async def seed_sample_invoices():
+    """Seed 10 sample invoices using real crosswalk customers."""
+    samples = [
+        {"invoice_no":"1209501-A","order_no":"1209501","customer_id":"200121","bill2_name":"ADM Corn Processing","invoice_date":"2026-05-15","ship_date":"2026-05-12","po_no":"4500862341-R2","total_amount":6908.00,"tax_amount":0.00,"freight_amount":85.00,"lines":[{"line_no":1,"item_id":"9000238","item_desc":"Seal Kit","qty_shipped":6,"unit_price":45.00,"extended_price":270.00,"uom":"EA"},{"line_no":2,"item_id":"Z16820-250D","item_desc":"Diaphragm Assembly","qty_shipped":2,"unit_price":3319.00,"extended_price":6638.00,"uom":"EA"}]},
+        {"invoice_no":"1209895-A","order_no":"1209895","customer_id":"206035","bill2_name":"Nucor Steel - Crawfordsville","invoice_date":"2026-05-18","ship_date":"2026-05-16","po_no":"NUC-2026-41872-R2","total_amount":25772.00,"tax_amount":0.00,"freight_amount":600.00,"lines":[{"line_no":1,"item_id":"HE3-490-D","item_desc":"Filter Element","qty_shipped":4,"unit_price":6143.00,"extended_price":24572.00,"uom":"EA"},{"line_no":2,"item_id":"669339","item_desc":"O-Ring Kit","qty_shipped":12,"unit_price":50.00,"extended_price":600.00,"uom":"EA"}]},
+        {"invoice_no":"1210260-A","order_no":"1210260","customer_id":"207716","bill2_name":"Cargill - Eddyville","invoice_date":"2026-05-20","ship_date":"2026-05-17","po_no":"4521318204-R2","total_amount":36173.84,"tax_amount":0.00,"freight_amount":175.00,"lines":[{"line_no":1,"item_id":"P27049-990A","item_desc":"Pump Assembly 4HSNS-75","qty_shipped":1,"unit_price":35976.00,"extended_price":35976.00,"uom":"EA"},{"line_no":2,"item_id":"490.646.1Y.BC","item_desc":"Shaft Seal","qty_shipped":8,"unit_price":24.73,"extended_price":197.84,"uom":"EA"}]},
+        {"invoice_no":"1210315-A","order_no":"1210315","customer_id":"200513","bill2_name":"American Crystal Sugar Co.","invoice_date":"2026-05-22","ship_date":"2026-05-20","po_no":"CP-ACS-2026-0891-R2","total_amount":1477.44,"tax_amount":0.00,"freight_amount":50.00,"lines":[{"line_no":1,"item_id":"770104-000207","item_desc":"Bearing Assembly","qty_shipped":4,"unit_price":256.86,"extended_price":1027.44,"uom":"EA"},{"line_no":2,"item_id":"9000238","item_desc":"Seal Kit","qty_shipped":10,"unit_price":45.00,"extended_price":450.00,"uom":"EA"}]},
+        {"invoice_no":"1210358-A","order_no":"1210358","customer_id":"208426","bill2_name":"Kurita America Inc.","invoice_date":"2026-05-23","ship_date":"2026-05-21","po_no":"KWT-PO-2026-3318-R2","total_amount":688.26,"tax_amount":0.00,"freight_amount":50.00,"lines":[{"line_no":1,"item_id":"PH0260","item_desc":"Pump Housing","qty_shipped":2,"unit_price":125.00,"extended_price":250.00,"uom":"EA"},{"line_no":2,"item_id":"T10540036","item_desc":"Filter Cartridge","qty_shipped":6,"unit_price":73.21,"extended_price":439.26,"uom":"EA"}]},
+        {"invoice_no":"1210432-A","order_no":"1210432","customer_id":"203471","bill2_name":"Grain Processing Corp.","invoice_date":"2026-05-25","ship_date":"2026-05-23","po_no":"4500998112-R2","total_amount":12583.52,"tax_amount":0.00,"freight_amount":100.00,"lines":[{"line_no":1,"item_id":"460.646.17.BC.00A","item_desc":"Mechanical Seal","qty_shipped":12,"unit_price":24.73,"extended_price":296.76,"uom":"EA"},{"line_no":2,"item_id":"HE3-490-D","item_desc":"Filter Element","qty_shipped":2,"unit_price":6143.00,"extended_price":12286.00,"uom":"EA"}]},
+        {"invoice_no":"1210846-A","order_no":"1210846","customer_id":"207607","bill2_name":"Steel Dynamics Inc.","invoice_date":"2026-05-28","ship_date":"2026-05-26","po_no":"431908-R2","total_amount":500.00,"tax_amount":0.00,"freight_amount":25.00,"lines":[{"line_no":1,"item_id":"9000238","item_desc":"Seal Kit","qty_shipped":5,"unit_price":45.00,"extended_price":225.00,"uom":"EA"},{"line_no":2,"item_id":"PH0260","item_desc":"Pump Housing","qty_shipped":2,"unit_price":125.00,"extended_price":250.00,"uom":"EA"}]},
+        {"invoice_no":"1209418-A","order_no":"1209418","customer_id":"202846","bill2_name":"Equistar Chemical","invoice_date":"2026-05-29","ship_date":"2026-05-27","po_no":"4406338812-R2","total_amount":13223.00,"tax_amount":0.00,"freight_amount":175.00,"lines":[{"line_no":1,"item_id":"SHAFT-A","item_desc":"Drive Shaft Assembly 316SS","qty_shipped":1,"unit_price":6526.00,"extended_price":6526.00,"uom":"EA"},{"line_no":2,"item_id":"Z16820-250D","item_desc":"Diaphragm Assembly","qty_shipped":2,"unit_price":3319.00,"extended_price":6638.00,"uom":"EA"}]},
+        {"invoice_no":"1211057-A","order_no":"1211057","customer_id":"208421","bill2_name":"USS - Gary Works","invoice_date":"2026-05-30","ship_date":"2026-05-28","po_no":"21845992-R2","total_amount":2742.16,"tax_amount":0.00,"freight_amount":200.00,"lines":[{"line_no":1,"item_id":"770104-000207","item_desc":"Bearing Assembly","qty_shipped":6,"unit_price":256.86,"extended_price":1541.16,"uom":"EA"},{"line_no":2,"item_id":"669339","item_desc":"O-Ring Kit","qty_shipped":24,"unit_price":50.00,"extended_price":1200.00,"uom":"EA"}]},
+        {"invoice_no":"1211025-A","order_no":"1211025","customer_id":"306771","bill2_name":"Koch Fertilizer Company LLC","invoice_date":"2026-06-01","ship_date":"2026-05-30","po_no":"202617449-R2","total_amount":12646.00,"tax_amount":0.00,"freight_amount":220.00,"lines":[{"line_no":1,"item_id":"HE3-490-D","item_desc":"Filter Element","qty_shipped":2,"unit_price":6143.00,"extended_price":12286.00,"uom":"EA"},{"line_no":2,"item_id":"9000238","item_desc":"Seal Kit","qty_shipped":8,"unit_price":45.00,"extended_price":360.00,"uom":"EA"}]},
+    ]
+    seeded = []
+    for inv in samples:
+        inv_id = f"INV-{_hashlib.md5((inv['invoice_no']+inv['customer_id']).encode()).hexdigest()[:10].upper()}"
+        if get_invoice(inv_id):
+            continue  # already exists
+        inv["invoice_id"]    = inv_id
+        inv["status"]        = "pending"
+        inv["source_system"] = _invoice_source_system(inv["customer_id"])
+        pb = _build_invoice_payload(inv)
+        inv["payload"]       = pb["payload"]
+        inv["content_type"]  = pb["content_type"]
+        save_invoice(inv_id, inv)
+        seeded.append(inv_id)
+    return {"seeded": len(seeded), "total_samples": len(samples), "invoice_ids": seeded}

@@ -418,6 +418,8 @@ input:focus, select:focus, textarea:focus { outline:1px solid #3b82f6; }
 <div class="tab-bar">
   <button class="nav-tab active" id="tab-review"   onclick="showTab('review')">📋 PO Review</button>
   <button class="nav-tab"        id="tab-invoices" onclick="showTab('invoices')">🧾 Invoices</button>
+  <div style="flex:1;"></div>
+  <button id="invSeedBtn" style="display:none;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border-color);background:transparent;color:var(--text-secondary);" onclick="seedSampleInvoices()" title="Load 10 sample invoices">+ Seed Sample Data</button>
 </div>
 
 <!-- ── PO Review Tab ── -->
@@ -512,14 +514,89 @@ input:focus, select:focus, textarea:focus { outline:1px solid #3b82f6; }
 
 <!-- ── Invoices Tab ── -->
 <div class="tab-content" id="content-invoices">
-  <div class="invoice-placeholder">
-    <div class="ip-icon">🧾</div>
-    <h2>Invoice Module — Coming Soon</h2>
-    <p>This module will automatically sync P21 invoices back to Coupa and Ariba after order fulfillment. Once enabled, approved Sales Orders will trigger invoice creation and push remittance data back to the procurement system.</p>
-    <p style="margin-top:12px;font-size:12px;color:var(--text-secondary);">Contact your administrator to enable this feature.</p>
-    <span class="ip-badge">ENABLE_INVOICE_SYNC=true in environment config</span>
+<div class="lanes">
+
+  <!-- LEFT: Invoice Queue -->
+  <div class="lane">
+    <div class="lane-hdr">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="lane-title">Invoice Queue</span>
+        <span class="badge-count" id="invQueueBadge">0</span>
+      </div>
+      <div class="filter-pills">
+        <button class="pill active" onclick="filterInv('all',event)">All</button>
+        <button class="pill" onclick="filterInv('pending',event)">Pending</button>
+        <button class="pill" onclick="filterInv('sent',event)">Sent</button>
+        <button class="pill" onclick="filterInv('failed',event)">Failed</button>
+      </div>
+    </div>
+    <div class="lane-body" id="invList">
+      <div style="padding:30px;text-align:center;color:var(--text-muted);">Loading...</div>
+    </div>
+    <div class="lane-ftr">
+      <div class="upload-mini">
+        <div style="font-size:9px;text-transform:uppercase;color:var(--text-secondary);letter-spacing:1px;margin-bottom:4px;">Upload P21 Invoice CSV</div>
+        <input type="file" id="invFileUpload" accept=".csv">
+        <button class="btn btn-green btn-sm" onclick="uploadInvoiceCSV()" style="width:100%;justify-content:center;">Upload CSV</button>
+        <div id="invUploadResult" class="upload-result"></div>
+      </div>
+    </div>
   </div>
+
+  <!-- CENTER: Invoice Detail -->
+  <div class="lane">
+    <div class="lane-hdr">
+      <span class="lane-title">Invoice Detail</span>
+      <span id="invCenterLabel" style="font-size:11px;color:var(--text-secondary);"></span>
+    </div>
+    <div class="lane-body" id="invDetailPanel">
+      <div class="detail-empty">
+        <div class="de-icon">🧾</div>
+        <div class="de-title">Select an Invoice</div>
+        <div class="de-sub">Click any invoice to review header,<br>line items, and send to Ariba or Coupa</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Payload Preview -->
+  <div class="lane">
+    <div class="lane-hdr" style="justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="lane-title">Payload</span>
+        <span id="invPayloadPoNo" style="font-size:11px;color:#22c55e;font-weight:700;font-family:monospace;"></span>
+      </div>
+      <span id="invFormatBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:var(--meta-box);color:var(--text-secondary);"></span>
+    </div>
+    <div class="lane-body" id="invPayloadBody">
+      <div class="right-empty" id="invPayloadEmpty">
+        <div class="re-icon">📤</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">Invoice Payload</div>
+        <div style="font-size:11px;color:var(--text-muted);">Select an invoice to see<br>the Ariba cXML or Coupa JSON payload</div>
+      </div>
+      <pre id="invPayloadJson" style="display:none;font-family:'SF Mono',monospace;font-size:10.5px;line-height:1.6;color:var(--json-color);padding:14px 16px;white-space:pre-wrap;word-break:break-word;"></pre>
+    </div>
+    <div class="lane-ftr" style="display:flex;flex-direction:column;gap:8px;">
+      <button id="invSendBtn" class="btn btn-green fire-btn" disabled onclick="sendInvoice()">
+        📤 Send to Ariba / Coupa
+      </button>
+      <div style="display:flex;gap:8px;">
+        <button id="invDownloadBtn" class="btn btn-gray btn-sm" style="flex:1;justify-content:center;" disabled onclick="downloadInvoicePayload()">
+          ⬇ Download Payload
+        </button>
+        <button class="btn btn-gray btn-sm" onclick="copyInvPayload()" title="Copy to clipboard">Copy</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /.lanes -->
+
+<!-- Batch send bar -->
+<div style="background:var(--lane-hdr);border-top:1px solid var(--border-color);padding:8px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0;">
+  <span style="font-size:11px;color:var(--text-secondary);" id="invBatchStatus"></span>
+  <div style="flex:1;"></div>
+  <button class="btn btn-green btn-sm" onclick="sendAllPendingInvoices()">📤 Send All Pending</button>
 </div>
+</div><!-- /#content-invoices -->
 
 </div><!-- /#portal-wrap -->
 
@@ -641,6 +718,14 @@ function showTab(name) {
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   document.getElementById('content-' + name).classList.add('active');
+  const seedBtn = document.getElementById('invSeedBtn');
+  if (seedBtn) seedBtn.style.display = name === 'invoices' ? 'block' : 'none';
+  if (name === 'invoices' && invoices.length === 0) {
+    loadInvoices('all').then(() => {
+      // Auto-seed if empty
+      if (invoices.length === 0) seedSampleInvoices();
+    });
+  }
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -1151,6 +1236,254 @@ document.addEventListener('keydown',e=>{
   if(e.key==='ArrowDown'&&!inInput){const i=queue.findIndex(p=>p.intake_id===selectedId);if(i<queue.length-1)selectPO(queue[i+1].intake_id);}
   if(e.key==='ArrowUp'&&!inInput){const i=queue.findIndex(p=>p.intake_id===selectedId);if(i>0)selectPO(queue[i-1].intake_id);}
 });
+
+// ── Invoice Module ────────────────────────────────────────────────────────────
+let invoices = [], invFilter = 'all', selectedInvId = null;
+
+async function loadInvoices(filter) {
+  try {
+    const url = filter && filter !== 'all'
+      ? `${API}/api/v1/invoices/queue?status=${filter}`
+      : `${API}/api/v1/invoices/queue`;
+    invoices = await (await fetch(url, { credentials:'include' })).json();
+    renderInvoiceQueue();
+  } catch(e) {
+    document.getElementById('invList').innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">Error loading invoices</div>';
+  }
+}
+
+function filterInv(f, e) {
+  invFilter = f;
+  document.querySelectorAll('#content-invoices .pill').forEach(p => p.classList.remove('active'));
+  if (e?.target) e.target.classList.add('active');
+  loadInvoices(f);
+}
+
+function renderInvoiceRow(inv) {
+  const src    = (inv.source_system || 'ariba').toUpperCase();
+  const srcCls = inv.source_system === 'coupa' ? 'coupa' : 'ariba';
+  const amt    = `$${(inv.total_amount||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  const stColor= inv.status==='sent' ? '#22c55e' : inv.status==='failed' ? '#ef4444' : inv.status==='rejected' ? '#94a3b8' : '#f59e0b';
+  const st     = (inv.status||'pending').toUpperCase();
+  const sel    = selectedInvId === inv.invoice_id ? 'selected' : '';
+  return `<div class="po-item ${sel}" onclick="selectInvoice('${inv.invoice_id}')" tabindex="0">
+    <div><span class="src-tag ${srcCls}">${src}</span> <span class="po-num" style="font-size:12px;">${inv.invoice_no}</span></div>
+    <div class="po-meta">${inv.customer_name || '—'}</div>
+    <div class="po-conf" style="margin-top:3px;">
+      <span style="color:var(--text-primary);font-weight:600;">${amt}</span>
+      <span style="color:${stColor};margin-left:8px;font-weight:600;">${st}</span>
+      <span style="color:var(--text-muted);margin-left:6px;">${inv.invoice_date||''}</span>
+    </div>
+  </div>`;
+}
+
+function renderInvoiceQueue() {
+  const el = document.getElementById('invList');
+  document.getElementById('invQueueBadge').textContent = invoices.length;
+  const pending = invoices.filter(i => i.status === 'pending').length;
+  document.getElementById('invBatchStatus').textContent = `${pending} invoice${pending!==1?'s':''} pending`;
+  if (!invoices.length) {
+    el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:13px;">No invoices.<br><span style="font-size:11px;display:block;margin-top:6px;">Upload a CSV or use Seed Sample Data.</span></div>';
+    return;
+  }
+  // Group by status for swim lanes
+  const pending_items  = invoices.filter(i => i.status === 'pending');
+  const sent_items     = invoices.filter(i => i.status === 'sent');
+  const other_items    = invoices.filter(i => !['pending','sent'].includes(i.status));
+  let html = '';
+  if (pending_items.length) {
+    html += `<div class="swim-lane-header needs-review"><span>Pending Send</span><span class="swim-count">${pending_items.length}</span></div>`;
+    html += pending_items.map(renderInvoiceRow).join('');
+  }
+  if (sent_items.length) {
+    html += `<div class="swim-lane-header ready-to-approve"><span>Sent</span><span class="swim-count">${sent_items.length}</span></div>`;
+    html += sent_items.map(renderInvoiceRow).join('');
+  }
+  if (other_items.length) {
+    html += `<div class="swim-lane-header" style="background:var(--meta-box);color:var(--text-secondary);"><span>Rejected / Failed</span><span class="swim-count">${other_items.length}</span></div>`;
+    html += other_items.map(renderInvoiceRow).join('');
+  }
+  el.innerHTML = html;
+}
+
+async function selectInvoice(id) {
+  selectedInvId = id;
+  renderInvoiceQueue();
+  const inv = invoices.find(i => i.invoice_id === id);
+  if (!inv) return;
+  document.getElementById('invCenterLabel').textContent = `INV ${inv.invoice_no}`;
+  renderInvoiceDetail(inv);
+  await loadInvoicePayload(id);
+}
+
+function renderInvoiceDetail(inv) {
+  const panel = document.getElementById('invDetailPanel');
+  panel.scrollTop = 0;
+  const amt    = (n) => `$${(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  const stColor= inv.status==='sent' ? '#22c55e' : inv.status==='failed' ? '#ef4444' : '#f59e0b';
+  const canSend = ['pending','ready_to_send'].includes(inv.status);
+  panel.innerHTML = `
+    <div class="sticky-bar" style="justify-content:space-between;">
+      <div class="po-quick-info">
+        <span class="badge-conf ${inv.status==='sent'?'green':inv.status==='failed'?'red':'yellow'}" style="text-transform:uppercase;">${inv.status}</span>
+        <span style="font-size:12px;color:var(--text-secondary);">${inv.customer_name||''}</span>
+        <span class="src-tag ${inv.source_system==='coupa'?'coupa':'ariba'}">${(inv.source_system||'ARIBA').toUpperCase()}</span>
+      </div>
+      <div style="display:flex;gap:6px;">
+        ${canSend ? `<button class="btn btn-green btn-sm" onclick="sendSingleInvoice('${inv.invoice_id}')">📤 Send</button>` : ''}
+        ${canSend ? `<button class="btn btn-red btn-sm" onclick="rejectSingleInvoice('${inv.invoice_id}')">Reject</button>` : ''}
+      </div>
+    </div>
+    <div class="detail-body">
+      <div class="meta-grid">
+        <div class="meta-box"><div class="lbl">Invoice No.</div><div class="val" style="font-family:monospace;">${inv.invoice_no}</div></div>
+        <div class="meta-box"><div class="lbl">Customer</div><div class="val">${inv.customer_name||'—'}</div></div>
+        <div class="meta-box"><div class="lbl">Invoice Date</div><div class="val">${inv.invoice_date||'—'}</div></div>
+        <div class="meta-box"><div class="lbl">Ship Date</div><div class="val">${inv.ship_date||inv.invoice_date||'—'}</div></div>
+        <div class="meta-box"><div class="lbl">PO Reference</div><div class="val" style="font-family:monospace;font-size:11px;">${inv.po_no||inv.order_no||'—'}</div></div>
+        <div class="meta-box"><div class="lbl">Total Amount</div><div class="val" style="color:#22c55e;font-size:16px;">${amt(inv.total_amount)}</div></div>
+      </div>
+      ${inv.tax_amount||inv.freight_amount ? `<div style="display:flex;gap:10px;margin-bottom:14px;">
+        ${inv.tax_amount ? `<div class="meta-box" style="flex:1;"><div class="lbl">Tax</div><div class="val">${amt(inv.tax_amount)}</div></div>` : ''}
+        ${inv.freight_amount ? `<div class="meta-box" style="flex:1;"><div class="lbl">Freight</div><div class="val">${amt(inv.freight_amount)}</div></div>` : ''}
+      </div>` : ''}
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);margin:14px 0 6px;">Line Items (${(inv.lines||[]).length})</div>
+      <table>
+        <thead><tr><th>#</th><th>Item ID</th><th>Description</th><th>Qty</th><th>Unit Price</th><th>Extended</th></tr></thead>
+        <tbody>${(inv.lines||[]).map((l,i)=>`<tr>
+          <td>${l.line_no||i+1}</td>
+          <td style="font-family:monospace;font-size:11px;">${l.item_id||'—'}</td>
+          <td style="color:var(--text-secondary);">${(l.item_desc||l.description||'—').substring(0,35)}</td>
+          <td>${l.qty_shipped||l.qty_invoiced||0}</td>
+          <td>${amt(l.unit_price)}</td>
+          <td style="font-weight:600;">${amt(l.extended_price)}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+      ${inv.sent_at ? `<div style="margin-top:12px;font-size:11px;color:#22c55e;">✓ Sent at ${new Date(inv.sent_at).toLocaleString()}</div>` : ''}
+      ${inv.error ? `<div style="margin-top:8px;font-size:11px;color:#ef4444;">⚠ ${inv.error}</div>` : ''}
+    </div>`;
+}
+
+async function loadInvoicePayload(invoiceId) {
+  document.getElementById('invPayloadEmpty').style.display = 'none';
+  const pre = document.getElementById('invPayloadJson');
+  pre.style.display = 'block';
+  pre.textContent = '// Loading payload...\n';
+  document.getElementById('invSendBtn').disabled = true;
+  document.getElementById('invDownloadBtn').disabled = true;
+
+  try {
+    const resp = await fetch(`${API}/api/v1/invoices/${invoiceId}/payload`, { credentials:'include' });
+    const data = await resp.json();
+    const inv  = invoices.find(i => i.invoice_id === invoiceId);
+
+    document.getElementById('invPayloadPoNo').textContent = data.invoice_no || '';
+    const fmt = (data.source_system||'ariba').toUpperCase();
+    const badge = document.getElementById('invFormatBadge');
+    badge.textContent = fmt === 'COUPA' ? 'Coupa JSON' : 'Ariba cXML';
+    badge.style.background = fmt === 'COUPA' ? '#ede9fe' : '#dbeafe';
+    badge.style.color      = fmt === 'COUPA' ? '#5b21b6' : '#1e40af';
+
+    pre.textContent = data.payload || '// No payload generated';
+
+    const canSend = inv && ['pending','ready_to_send'].includes(inv.status);
+    document.getElementById('invSendBtn').disabled = !canSend;
+    document.getElementById('invDownloadBtn').disabled = false;
+  } catch(e) {
+    pre.textContent = `// Error loading payload:\n// ${e.message}`;
+  }
+}
+
+async function sendInvoice() {
+  if (!selectedInvId) return;
+  await sendSingleInvoice(selectedInvId);
+}
+
+async function sendSingleInvoice(id) {
+  try {
+    const resp = await fetch(`${API}/api/v1/invoices/${id}/send`, {
+      method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}
+    });
+    const data = await resp.json();
+    showToast(`Invoice sent (${data.mode||'mock'}) — no live endpoint configured`, 'success', 5000);
+    await loadInvoices(invFilter);
+    if (selectedInvId === id) {
+      const updated = invoices.find(i => i.invoice_id === id);
+      if (updated) renderInvoiceDetail(updated);
+    }
+  } catch(e) { showToast('Send failed: ' + e.message, 'error'); }
+}
+
+async function rejectSingleInvoice(id) {
+  const reason = prompt('Rejection reason:');
+  if (!reason) return;
+  try {
+    await fetch(`${API}/api/v1/invoices/${id}/reject`, {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ reason, reviewer: currentUser?.name||'Reviewer' })
+    });
+    showToast('Invoice rejected', 'info');
+    await loadInvoices(invFilter);
+    if (selectedInvId === id) {
+      const updated = invoices.find(i => i.invoice_id === id);
+      if (updated) renderInvoiceDetail(updated);
+    }
+  } catch(e) { showToast('Reject failed: ' + e.message, 'error'); }
+}
+
+function downloadInvoicePayload() {
+  if (!selectedInvId) return;
+  window.open(`${API}/api/v1/invoices/download/${selectedInvId}`, '_blank');
+}
+
+function copyInvPayload() {
+  const pre = document.getElementById('invPayloadJson');
+  if (!pre?.textContent?.trim() || pre.textContent.startsWith('//')) return;
+  navigator.clipboard.writeText(pre.textContent).then(
+    () => showToast('Payload copied', 'success'),
+    () => showToast('Copy failed', 'error')
+  );
+}
+
+async function sendAllPendingInvoices() {
+  const pending = invoices.filter(i => i.status === 'pending').length;
+  if (!pending) { showToast('No pending invoices', 'warn'); return; }
+  if (!confirm(`Send all ${pending} pending invoices?`)) return;
+  try {
+    const resp = await fetch(`${API}/api/v1/invoices/batch/send`, {
+      method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}
+    });
+    const data = await resp.json();
+    showToast(`${data.sent_count} invoices sent (mock mode)`, 'success', 5000);
+    await loadInvoices(invFilter);
+  } catch(e) { showToast('Batch send failed: ' + e.message, 'error'); }
+}
+
+async function uploadInvoiceCSV() {
+  const fi = document.getElementById('invFileUpload');
+  if (!fi.files.length) { showToast('Select a CSV file first', 'warn'); return; }
+  const fd = new FormData(); fd.append('file', fi.files[0]);
+  const re = document.getElementById('invUploadResult'); re.textContent = 'Uploading...';
+  try {
+    const d = await (await fetch(`${API}/api/v1/invoices/upload-csv`, {
+      method:'POST', credentials:'include', body:fd
+    })).json();
+    re.textContent = `Uploaded ${d.uploaded} invoice${d.uploaded!==1?'s':''}`;
+    fi.value = '';
+    await loadInvoices(invFilter);
+  } catch(e) { re.textContent = 'Error: ' + e.message; }
+}
+
+async function seedSampleInvoices() {
+  try {
+    const d = await (await fetch(`${API}/api/v1/invoices/seed`, {
+      method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}
+    })).json();
+    showToast(`Seeded ${d.seeded} sample invoices`, 'success');
+    await loadInvoices(invFilter);
+  } catch(e) { showToast('Seed failed: ' + e.message, 'error'); }
+}
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (function init(){
