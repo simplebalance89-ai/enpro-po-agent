@@ -2908,16 +2908,16 @@ async def _bootstrap_crosswalks_if_empty():
         marker = os.path.join(cw_dir, "customer_crosswalk.csv")
         if os.path.exists(marker):
             logger.info(f"Crosswalks already present at {cw_dir}, skipping blob bootstrap")
-            return
-        logger.info(f"Crosswalks missing at {cw_dir}, syncing from blob on startup")
-        result = sync_crosswalks_from_blob()
-        logger.info(
-            f"Startup blob sync: downloaded={len(result.get('downloaded', []))}, "
-            f"skipped={len(result.get('skipped', []))}, errors={len(result.get('errors', []))}"
-        )
-        if result.get("errors"):
-            for err in result["errors"][:5]:
-                logger.warning(f"  blob sync error: {err}")
+        else:
+            logger.info(f"Crosswalks missing at {cw_dir}, syncing from blob on startup")
+            result = sync_crosswalks_from_blob()
+            logger.info(
+                f"Startup blob sync: downloaded={len(result.get('downloaded', []))}, "
+                f"skipped={len(result.get('skipped', []))}, errors={len(result.get('errors', []))}"
+            )
+            if result.get("errors"):
+                for err in result["errors"][:5]:
+                    logger.warning(f"  blob sync error: {err}")
     except Exception as e:
         logger.error(f"Startup blob bootstrap failed (non-fatal): {e}")
 
