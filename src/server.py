@@ -2921,17 +2921,52 @@ async def _bootstrap_crosswalks_if_empty():
     except Exception as e:
         logger.error(f"Startup blob bootstrap failed (non-fatal): {e}")
 
-    # ── Background email polling ──────────────────────────────────────────
+    # ── Background email polling — Graph API ─────────────────────────────
     try:
         from services.intake.email_poller import EmailPoller, TENANT_ID, CLIENT_ID, CLIENT_SECRET
         if TENANT_ID and CLIENT_ID and CLIENT_SECRET:
-            logger.info("Graph API credentials found — starting background email poller")
+            logger.info("Graph API credentials found — starting Graph email poller")
             poller = EmailPoller()
             asyncio.create_task(poller.run_continuous())
         else:
-            logger.info("Graph API credentials not configured — email polling disabled")
+            logger.info("Graph API credentials not set — Graph email poller disabled")
     except Exception as e:
-        logger.error(f"Failed to start email poller (non-fatal): {e}")
+        logger.error(f"Failed to start Graph email poller (non-fatal): {e}")
+
+    # ── Background email polling — IMAP ──────────────────────────────────
+    try:
+        from services.intake.imap_poller import imap_credentials_configured, run_imap_poller
+        if imap_credentials_configured():
+            logger.info("IMAP credentials found — starting IMAP email poller")
+
+            async def _process_imap_attachment(filename: str, content: bytes, source: str):
+                """Process a PO attachment received via IMAP."""
+                import tempfile as _tmp
+                fname_lower = filename.lower()
+                if fname_lower.endswith(".pdf"):
+                    with _tmp.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                        tmp.write(content)
+                        tmp_path = tmp.name
+                    try:
+                        header, lines, raw = po_parser.parse_pdf(
+                            tmp_path, settings.doc_intel_endpoint, settings.doc_intel_key
+                        )
+                    finally:
+                        os.unlink(tmp_path)
+                elif fname_lower.endswith((".xml", ".cxml")):
+                    header, lines, raw = po_parser.parse_cxml(content.decode("utf-8", errors="replace"))
+                elif fname_lower.endswith(".csv"):
+                    header, lines, raw = _parse_csv_po(content.decode("utf-8-sig", errors="replace"))
+                else:
+                    logger.warning(f"IMAP: unsupported attachment type: {filename}")
+                    return
+                await _process_po_to_so(header, lines, raw, source, fname_lower.rsplit(".", 1)[-1])
+
+            asyncio.create_task(run_imap_poller(_process_imap_attachment))
+        else:
+            logger.info("IMAP credentials not set (IMAP_HOST/IMAP_USER/IMAP_PASSWORD) — IMAP poller disabled")
+    except Exception as e:
+        logger.error(f"Failed to start IMAP email poller (non-fatal): {e}")
 
 
 @app.post("/api/v1/crosswalk/build")
