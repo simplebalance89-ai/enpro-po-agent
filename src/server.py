@@ -2822,22 +2822,40 @@ async def lookup_items(q: str = "", limit: int = 25):
 
 
 @app.get("/api/v1/lookup/customers")
-async def lookup_customers(q: str = "", limit: int = 20):
-    """Search customers by name for Edit PO customer dropdown."""
+async def lookup_customers(q: str = "", limit: int = 20, source: str = ""):
+    """Search customers by name/ID for Edit PO customer dropdown.
+    Optional source param filters by source_system (ariba/coupa/email/direct).
+    Returns source_system and po_history_count for each match.
+    """
     engine = _get_customer_engine()
-    if not q:
-        return engine.customer_xw[:limit]
 
-    q_upper = q.upper()
-    matches = [r for r in engine.customer_xw if
-               q_upper in (r.get("p21_customer_name", "").upper()) or
-               q_upper in (r.get("p21_customer_id", ""))]
+    rows = engine.customer_xw if not q else [
+        r for r in engine.customer_xw
+        if q.upper() in (r.get("p21_customer_name", "").upper())
+        or q.upper() in (r.get("p21_customer_id", ""))
+    ]
+
+    if source:
+        src_lower = source.lower()
+        rows = [r for r in rows if (r.get("source_system") or "").lower() == src_lower
+                or (src_lower in ("email", "direct") and (r.get("source_system") or "").lower() in ("email", "direct"))]
+
+    # Pre-count PO history per customer
+    cust_po_counts: dict[str, int] = {}
+    for records in engine.po_history.values():
+        for rec in records:
+            cid = rec.get("p21_customer_id", "")
+            if cid:
+                cust_po_counts[cid] = cust_po_counts.get(cid, 0) + 1
+
     return [{
-        "p21_customer_id": r.get("p21_customer_id"),
+        "p21_customer_id":   r.get("p21_customer_id"),
         "p21_customer_name": r.get("p21_customer_name"),
-        "ship2_name": r.get("ship2_name"),
-        "ship2_zip": r.get("ship2_zip"),
-    } for r in matches[:limit]]
+        "ship2_name":        r.get("ship2_name"),
+        "ship2_zip":         r.get("ship2_zip"),
+        "source_system":     r.get("source_system", ""),
+        "po_history_count":  cust_po_counts.get(r.get("p21_customer_id", ""), 0),
+    } for r in rows[:limit]]
 
 
 # ── Quote Export ──────────────────────────────────────────────────────────────
