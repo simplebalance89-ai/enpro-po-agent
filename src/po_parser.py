@@ -249,38 +249,59 @@ def parse_pdf(file_path: str, _endpoint: str = "", _key: str = "") -> tuple[POHe
             return 0.0
 
     # ── PO Number ───────────────────────────────────────────────────────────
-    # Ordered most-specific first. All require ≥5 char result to avoid
-    # matching substrings like "po" inside "corporation" → "ration".
+    # Strategy 1: table column lookup — most reliable for columnar PDFs
+    # (e.g. "Customer PO Number" header with value in same column next row)
     po_no = ""
-    for pat in [
-        # Explicit "PO Number:" / "PO No:" label (most reliable)
-        r"PO\s+Number\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
-        r"PO\s+No\.?\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
-        r"PO\s*#\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
-        # "P.O. Number:" / "P.O. #:" with literal dots
-        r"P\.O\.\s*(?:Number|No\.?|#)?\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
-        # "Purchase Order [Number/No/#]:"
-        r"Purchase\s+Order\s*(?:No\.?|#|Number)?\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
-        # "Order Number:" / "Order No:"
-        r"Order\s+(?:No\.?|Number|#)\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
-        # Line starting with PO followed by digits: "PO34526211"
-        r"^(PO\d{4,12})\b",
-        # "PO " / "PO#" preceded by whitespace, colon, or start-of-line (word-boundary safe)
-        r"(?:^|[\s:(])PO\s*#?\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
-    ]:
-        m = re.search(pat, full_text, re.IGNORECASE | re.MULTILINE)
-        if m:
-            candidate = m.group(1).strip().rstrip(".")
-            # Must be ≥5 chars and not a common header word
-            if len(candidate) >= 5 and not re.match(
-                r"^(Date|Terms|Ship|Bill|To|Net|Page|Rev|Corp|Inc|LLC|From|Attn)$",
-                candidate, re.IGNORECASE,
-            ):
-                po_no = candidate
+    _PO_COL_RE = re.compile(
+        r'\b(?:customer\s+)?(?:purchase\s+order|p\.?o\.?)\s*(?:number|no\.?|#)?\b',
+        re.IGNORECASE,
+    )
+    for table in all_tables:
+        for row_idx, row in enumerate(table):
+            for col_idx, cell in enumerate(row):
+                if cell and _PO_COL_RE.search(str(cell)):
+                    # Value is in same column of the very next row
+                    if row_idx + 1 < len(table) and col_idx < len(table[row_idx + 1]):
+                        val = str(table[row_idx + 1][col_idx] or "").strip()
+                        if len(val) >= 5 and re.match(r"[A-Z0-9]", val, re.I):
+                            po_no = val
+                            break
+            if po_no:
                 break
+        if po_no:
+            break
 
-    # Fallback: use filename stem — also used when extraction returns garbage
-    # (anything under 5 chars is considered a failed parse)
+    # Strategy 2: regex over full text — ordered most-specific first.
+    # All require ≥5-char result and avoid matching mid-word "po" substrings.
+    if not po_no:
+        for pat in [
+            # "Customer PO Number" header; value appears later on the same line or next line
+            # Handles: "Customer PO Number\nMOREC00 06/01/2026 4710632741"
+            r"Customer\s+PO\s+(?:Number|No\.?)\s*:?\s*\n[^\n]*?(\d{6,12})",
+            # Explicit single-line labeled fields with colon/hash separator
+            r"PO\s+No\.?\s*[:#]\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
+            r"PO\s*#\s*[:#]?\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
+            r"P\.O\.\s*(?:Number|No\.?|#)\s*[:#]?\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
+            r"Purchase\s+Order\s*(?:No\.?|#|Number)\s*[:#]\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
+            r"Order\s+(?:No\.?|Number|#)\s*[:#]\s*([A-Z0-9][A-Z0-9\-\/]{4,29})",
+            # Line starting with PO + digits: "PO34526211"
+            r"^(PO\d{4,12})\b",
+            # "PO Number" without colon — but only grab a pure-digit or clearly PO-shaped value
+            # (avoids grabbing taker codes like MOREC00 that precede the real number)
+            r"PO\s+Number\s*\n[^\n]*?(\d{6,12})",
+            r"PO\s+Number\s*:?\s*(\d{6,12})",
+        ]:
+            m = re.search(pat, full_text, re.IGNORECASE | re.MULTILINE)
+            if m:
+                candidate = m.group(1).strip().rstrip(".")
+                if len(candidate) >= 5 and not re.match(
+                    r"^(Date|Terms|Ship|Bill|To|Net|Page|Rev|Corp|Inc|LLC|From|Attn|Taker)$",
+                    candidate, re.IGNORECASE,
+                ):
+                    po_no = candidate
+                    break
+
+    # Fallback: filename stem when nothing matched or result is too short
     if not po_no or len(po_no) < 5:
         po_no = os.path.splitext(os.path.basename(file_path))[0][:40]
 
